@@ -20,4 +20,8 @@
 
 ## 개발
 
-Node.js 22 이상에서 `npm ci` 후 `npm test`를 실행합니다.
+JavaScript · HTML/CSS · Chrome Extensions (Manifest V3) · Node.js · jsdom
+
+## 안내
+
+부산대학교에서 공식 제공하는 프로그램이 아닙니다. 사용으로 발생하는 문제나 손해에 대해 개발자는 책임을 지지 않습니다.
