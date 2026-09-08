@@ -1,0 +1,40 @@
+body#page-site-index .dashboard-container > .dashboard-prompt { display: none !important; }
+
+#plato-enhanced-classroom {
+  --pe-ink: var(--csms-tx-hierarchy-primary, #161819);
+  --pe-muted: var(--csms-tx-hierarchy-quinary, #899199);
+  --pe-blue: var(--csms-bg-semantic-info-primary, #1181f9);
+  --pe-border: var(--csms-bo-hierarchy-secondary, #e0e3e5);
+  background: transparent;
+  border: 0;
+  color: var(--pe-ink);
+  font-family: "Pretendard Variable", Pretendard, -apple-system, "Malgun Gothic", Helvetica, sans-serif, AppleGothic;
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+#plato-enhanced-classroom * { box-sizing: border-box; }
+#plato-enhanced-classroom .pe-classroom-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 48px; margin-bottom: 16px; }
+#plato-enhanced-classroom h2 { font-size: 24px; font-weight: 700; line-height: 34px; margin: 0; color: var(--pe-ink); }
+#plato-enhanced-classroom .pe-classroom-clock { font-size: 12px; color: var(--pe-muted); }
+#plato-enhanced-classroom .pe-classroom-refresh { margin-left: auto; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; color: var(--pe-muted); font: inherit; font-size: 12px; cursor: pointer; }
+#plato-enhanced-classroom .pe-classroom-refresh:hover { background: var(--csms-bg-hierarchy-secondary, #f0f1f2); color: var(--pe-ink); }
+#plato-enhanced-classroom .pe-classroom-refresh:disabled { opacity: .55; cursor: wait; }
+#plato-enhanced-classroom .pe-classroom-card { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 24px; border-radius: var(--csms-border-radius-16, 16px); background: var(--csms-bg-neutral-white, #fff); border: 1px solid var(--pe-border); }
+#plato-enhanced-classroom .pe-classroom-card + .pe-classroom-card { margin-top: 12px; }
+#plato-enhanced-classroom .pe-classroom-info { min-width: 0; }
+#plato-enhanced-classroom .pe-classroom-badge { display: inline-block; color: var(--pe-muted); font-size: 12px; font-weight: 500; margin-bottom: 8px; }
+#plato-enhanced-classroom .is-current .pe-classroom-badge { color: var(--pe-blue); }
+#plato-enhanced-classroom h3 { color: var(--pe-ink); font-size: 20px; font-weight: 700; line-height: 28px; margin: 0 0 8px; overflow-wrap: anywhere; }
+#plato-enhanced-classroom .pe-classroom-info p { color: var(--csms-tx-hierarchy-secondary, #2c2f32); margin: 0; font-size: 14px; line-height: 22px; }
+#plato-enhanced-classroom .pe-classroom-enter { display: inline-flex; justify-content: center; align-items: center; white-space: nowrap; min-height: 40px; padding: 10px 16px; border-radius: 8px; background: var(--pe-blue); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+#plato-enhanced-classroom .pe-classroom-enter:hover { filter: brightness(.94); }
+#plato-enhanced-classroom a:focus-visible, #plato-enhanced-classroom button:focus-visible { outline: 3px solid var(--pe-blue); outline-offset: 3px; }
+#plato-enhanced-classroom .pe-classroom-idle { font-size: 14px; margin: 0 0 12px; color: var(--pe-muted); }
+#plato-enhanced-classroom .pe-classroom-note { font-size: 11px; line-height: 18px; margin: 12px 0 0; color: var(--pe-muted); }
+#plato-enhanced-classroom .pe-classroom-note:empty { display: none; }
+#plato-enhanced-classroom .pe-classroom-connect { display: inline-block; margin-top: 12px; color: var(--pe-blue); font-weight: 600; }
+@media (max-width: 650px) {
+  #plato-enhanced-classroom .pe-classroom-card { align-items: stretch; flex-direction: column; padding: 20px; gap: 16px; }
+  #plato-enhanced-classroom .pe-classroom-header { gap: 8px; }
+}

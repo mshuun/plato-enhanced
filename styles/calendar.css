@@ -1,0 +1,669 @@
+#plato-calendar-ext-root {
+  --plato-calendar-ext-primary: var(--csms-bg-semantic-info-primary, #1181f9);
+  --plato-calendar-ext-text: var(--csms-tx-hierarchy-primary, #161819);
+  --plato-calendar-ext-text-secondary: var(--csms-tx-hierarchy-secondary, #2c2f32);
+  --plato-calendar-ext-text-muted: var(--csms-tx-hierarchy-quinary, #899199);
+  --plato-calendar-ext-bg: var(--csms-bg-hierarchy-primary, #fcfcfc);
+  --plato-calendar-ext-bg-subtle: var(--csms-bg-hierarchy-secondary, #f0f1f2);
+  --plato-calendar-ext-bg-card: var(--csms-bg-neutral-white, #fff);
+  --plato-calendar-ext-border: var(--csms-bo-hierarchy-tertiary, #d3d6d9);
+  --plato-calendar-ext-radius: var(--csms-border-radius-16, 16px);
+  box-sizing: border-box;
+  color: var(--plato-calendar-ext-text-secondary);
+  font-family: "Pretendard Variable", Pretendard, -apple-system, "Malgun Gothic", Helvetica, sans-serif, AppleGothic;
+  isolation: isolate;
+  position: relative;
+  width: 100%;
+  z-index: 2;
+}
+
+
+.plato-calendar-ext-detail-status-submitted .plato-calendar-ext-detail-value {
+  color: #26865d;
+  font-weight: 700;
+}
+
+#plato-calendar-ext-root *,
+#plato-calendar-ext-root *::before,
+#plato-calendar-ext-root *::after,
+.plato-calendar-ext-modal-overlay *,
+.plato-calendar-ext-modal-overlay *::before,
+.plato-calendar-ext-modal-overlay *::after {
+  box-sizing: border-box;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 8px;
+  width: 100%;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-title-wrap {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-title {
+  color: var(--plato-calendar-ext-text);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 34px;
+  margin: 0;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-count {
+  align-items: center;
+  background: var(--plato-calendar-ext-bg-subtle);
+  border-radius: 999px;
+  color: var(--plato-calendar-ext-text-secondary);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 22px;
+  min-width: 22px;
+  padding: 2px 7px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-header-actions,
+#plato-calendar-ext-root .plato-calendar-ext-toolbar-actions,
+#plato-calendar-ext-root .plato-calendar-ext-navigation {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-content {
+  align-items: stretch;
+  background: var(--plato-calendar-ext-bg);
+  border: 1px solid var(--plato-calendar-ext-border);
+  border-radius: var(--plato-calendar-ext-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  width: 100%;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-month-title {
+  color: var(--plato-calendar-ext-text);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 28px;
+  margin: 0;
+  min-width: 126px;
+  text-align: center;
+}
+
+#plato-calendar-ext-root button,
+.plato-calendar-ext-modal-overlay button,
+.plato-calendar-ext-modal-overlay a {
+  font: inherit;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-icon-button,
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-icon-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--plato-calendar-ext-text-muted, #899199);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 22px;
+  height: 32px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-icon-button:hover,
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-icon-button:hover,
+#plato-calendar-ext-root .plato-calendar-ext-ghost-button:hover {
+  background: var(--plato-calendar-ext-bg-subtle, #f0f1f2);
+  color: var(--plato-calendar-ext-text-secondary, #2c2f32);
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-icon-button:focus-visible,
+#plato-calendar-ext-root .plato-calendar-ext-ghost-button:focus-visible,
+#plato-calendar-ext-root .plato-calendar-ext-button:focus-visible,
+#plato-calendar-ext-root .plato-calendar-ext-activity:focus-visible,
+#plato-calendar-ext-root .plato-calendar-ext-more-button:focus-visible,
+.plato-calendar-ext-modal-overlay button:focus-visible,
+.plato-calendar-ext-modal-overlay a:focus-visible {
+  outline: 2px solid var(--plato-calendar-ext-primary, #1181f9);
+  outline-offset: 2px;
+}
+
+#plato-calendar-ext-root button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-ghost-button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--plato-calendar-ext-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  height: 28px;
+  padding: 4px 8px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-button,
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  height: 32px;
+  justify-content: center;
+  line-height: 20px;
+  padding: 5px 12px;
+  text-decoration: none;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-button-secondary,
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-button-secondary {
+  background: var(--plato-calendar-ext-bg-card, #fff);
+  border-color: var(--plato-calendar-ext-border, #d3d6d9);
+  color: var(--plato-calendar-ext-text-secondary, #2c2f32);
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-button-secondary:hover,
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-button-secondary:hover {
+  background: var(--plato-calendar-ext-bg-subtle, #f0f1f2);
+}
+
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-button-primary {
+  background: var(--plato-calendar-ext-primary, #1181f9);
+  color: #fff;
+}
+
+.plato-calendar-ext-modal-overlay .plato-calendar-ext-button-primary:hover {
+  filter: brightness(0.94);
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-load-status {
+  align-items: center;
+  background: var(--plato-calendar-ext-bg-subtle);
+  border-radius: 8px;
+  color: var(--plato-calendar-ext-text-muted);
+  display: flex;
+  font-size: 13px;
+  gap: 10px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-load-status[hidden] {
+  display: none;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-inline-button {
+  background: transparent;
+  border: 0;
+  color: var(--plato-calendar-ext-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 2px;
+  text-decoration: underline;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-calendar {
+  border: 1px solid var(--plato-calendar-ext-border);
+  border-radius: 12px;
+  overflow: visible;
+  width: 100%;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-weekdays,
+#plato-calendar-ext-root .plato-calendar-ext-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-weekdays {
+  background: var(--plato-calendar-ext-bg-subtle);
+  border-radius: 11px 11px 0 0;
+  overflow: hidden;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-weekday {
+  color: var(--plato-calendar-ext-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 4px;
+  text-align: center;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day {
+  background: var(--plato-calendar-ext-bg-card);
+  border-right: 1px solid var(--plato-calendar-ext-border);
+  border-top: 1px solid var(--plato-calendar-ext-border);
+  min-height: 132px;
+  min-width: 0;
+  padding: 7px;
+  position: relative;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day:nth-child(7n) {
+  border-right: 0;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day:nth-last-child(-n + 7):first-child,
+#plato-calendar-ext-root .plato-calendar-ext-day:nth-last-child(-n + 7):first-child ~ .plato-calendar-ext-day {
+  border-bottom: 0;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-week:last-child .plato-calendar-ext-day:first-child {
+  border-radius: 0 0 0 11px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-week:last-child .plato-calendar-ext-day:last-child {
+  border-radius: 0 0 11px 0;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-other-month {
+  background: color-mix(in srgb, var(--plato-calendar-ext-bg-subtle) 55%, transparent);
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day-number {
+  align-items: center;
+  color: var(--plato-calendar-ext-text-secondary);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  height: 24px;
+  justify-content: center;
+  line-height: 20px;
+  margin-bottom: 3px;
+  min-width: 24px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-other-month .plato-calendar-ext-day-number {
+  color: var(--plato-calendar-ext-text-muted);
+  opacity: 0.65;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-today .plato-calendar-ext-day-number {
+  background: var(--plato-calendar-ext-primary);
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 700;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-sunday .plato-calendar-ext-day-number,
+#plato-calendar-ext-root .plato-calendar-ext-weekday.plato-calendar-ext-sunday {
+  color: #d64545;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-saturday .plato-calendar-ext-day-number,
+#plato-calendar-ext-root .plato-calendar-ext-weekday.plato-calendar-ext-saturday {
+  color: #3974c6;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-today.plato-calendar-ext-sunday .plato-calendar-ext-day-number,
+#plato-calendar-ext-root .plato-calendar-ext-today.plato-calendar-ext-saturday .plato-calendar-ext-day-number {
+  color: #fff;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day-items,
+#plato-calendar-ext-root .plato-calendar-ext-day-popover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-activity {
+  --plato-calendar-ext-status-color: var(--plato-calendar-ext-text-muted);
+  background: color-mix(in srgb, var(--plato-calendar-ext-status-color) 9%, transparent);
+  border: 0;
+  border-left: 3px solid var(--plato-calendar-ext-status-color);
+  border-radius: 5px;
+  color: var(--plato-calendar-ext-text-secondary);
+  cursor: pointer;
+  display: grid;
+  gap: 1px 5px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 4px 5px;
+  text-align: left;
+  width: 100%;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-activity:hover {
+  filter: brightness(0.96);
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-activity-time {
+  color: var(--plato-calendar-ext-status-color);
+  font-size: 10px;
+  font-weight: 700;
+  grid-column: 1;
+  white-space: nowrap;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-activity-title {
+  color: var(--plato-calendar-ext-text);
+  font-size: 11px;
+  font-weight: 600;
+  grid-column: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-activity-course {
+  color: var(--plato-calendar-ext-text-muted);
+  font-size: 10px;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-activity-status {
+  color: var(--plato-calendar-ext-status-color);
+  font-size: 10px;
+  font-weight: 600;
+  grid-column: 1 / -1;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-submitted,
+#plato-calendar-ext-root .plato-calendar-ext-status-completed {
+  --plato-calendar-ext-status-color: #26865d;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-manual {
+  --plato-calendar-ext-status-color: #26865d;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-incomplete {
+  --plato-calendar-ext-status-color: #b66a0a;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-due-soon {
+  --plato-calendar-ext-status-color: #c64040;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-overdue {
+  --plato-calendar-ext-status-color: #c64040;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-unknown {
+  --plato-calendar-ext-status-color: #7f6899;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-status-finished-past {
+  --plato-calendar-ext-status-color: #6f7780;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-more-button {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--plato-calendar-ext-primary);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 4px;
+  text-align: left;
+  width: 100%;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-more-button:hover {
+  background: var(--plato-calendar-ext-bg-subtle);
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day-popover {
+  background: var(--plato-calendar-ext-bg-card);
+  border: 1px solid var(--plato-calendar-ext-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -2px rgb(10 13 18 / 3%), 0 12px 16px -4px rgb(10 13 18 / 12%);
+  left: 7px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 10px;
+  position: absolute;
+  top: 52px;
+  width: min(320px, calc(100vw - 48px));
+  z-index: 40;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day-popover-right {
+  left: auto;
+  right: 7px;
+}
+
+#plato-calendar-ext-root .plato-calendar-ext-day-popover-header {
+  align-items: center;
+  color: var(--plato-calendar-ext-text);
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+#plato-calendar-ext-root.plato-calendar-ext-collapsed {
+  gap: 0;
+}
+
+body.plato-calendar-ext-modal-open {
+  overflow: hidden;
+}
+
+.plato-calendar-ext-modal-overlay {
+  align-items: center;
+  background: rgb(0 0 0 / 45%);
+  color: var(--csms-tx-hierarchy-secondary, #2c2f32);
+  display: flex;
+  font-family: "Pretendard Variable", Pretendard, -apple-system, "Malgun Gothic", Helvetica, sans-serif, AppleGothic;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 1060;
+}
+
+.plato-calendar-ext-modal-overlay[hidden] {
+  display: none;
+}
+
+.plato-calendar-ext-modal {
+  --plato-calendar-ext-primary: var(--csms-bg-semantic-info-primary, #1181f9);
+  --plato-calendar-ext-text: var(--csms-tx-hierarchy-primary, #161819);
+  --plato-calendar-ext-text-secondary: var(--csms-tx-hierarchy-secondary, #2c2f32);
+  --plato-calendar-ext-text-muted: var(--csms-tx-hierarchy-quinary, #899199);
+  --plato-calendar-ext-bg: var(--csms-bg-hierarchy-primary, #fcfcfc);
+  --plato-calendar-ext-bg-subtle: var(--csms-bg-hierarchy-secondary, #f0f1f2);
+  --plato-calendar-ext-bg-card: var(--csms-bg-neutral-white, #fff);
+  --plato-calendar-ext-border: var(--csms-bo-hierarchy-tertiary, #d3d6d9);
+  background: var(--plato-calendar-ext-bg-card);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -2px rgb(10 13 18 / 3%), 0 12px 16px -4px rgb(10 13 18 / 10%), 0 -1px 10px rgb(0 0 0 / 4%);
+  display: flex;
+  flex-direction: column;
+  max-height: min(760px, calc(100vh - 48px));
+  max-width: 620px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.plato-calendar-ext-modal-header,
+.plato-calendar-ext-modal-footer {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 18px 22px;
+}
+
+.plato-calendar-ext-modal-header {
+  border-bottom: 1px solid var(--plato-calendar-ext-border);
+}
+
+.plato-calendar-ext-modal-footer {
+  border-top: 1px solid var(--plato-calendar-ext-border);
+  justify-content: flex-end;
+}
+
+.plato-calendar-ext-modal-title {
+  color: var(--plato-calendar-ext-text);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  margin: 0;
+}
+
+.plato-calendar-ext-modal-body {
+  overflow-y: auto;
+  padding: 22px;
+}
+
+.plato-calendar-ext-detail-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.plato-calendar-ext-detail-row {
+  border-bottom: 1px solid color-mix(in srgb, var(--plato-calendar-ext-border) 65%, transparent);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 118px minmax(0, 1fr);
+  padding: 10px 0;
+}
+
+.plato-calendar-ext-detail-label,
+.plato-calendar-ext-detail-value {
+  font-size: 14px;
+  line-height: 21px;
+  margin: 0;
+}
+
+.plato-calendar-ext-detail-label {
+  color: var(--plato-calendar-ext-text-muted);
+  font-weight: 600;
+}
+
+.plato-calendar-ext-detail-value {
+  color: var(--plato-calendar-ext-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.plato-calendar-ext-detail-status-completed .plato-calendar-ext-detail-value,
+.plato-calendar-ext-detail-status-manual .plato-calendar-ext-detail-value {
+  color: #26865d;
+  font-weight: 700;
+}
+
+.plato-calendar-ext-detail-status-overdue .plato-calendar-ext-detail-value {
+  color: #c64040;
+  font-weight: 700;
+}
+
+.plato-calendar-ext-detail-status-due-soon .plato-calendar-ext-detail-value {
+  color: #c64040;
+  font-weight: 700;
+}
+
+.plato-calendar-ext-detail-status-incomplete .plato-calendar-ext-detail-value {
+  color: #b66a0a;
+  font-weight: 700;
+}
+
+.plato-calendar-ext-detail-status-unknown .plato-calendar-ext-detail-value {
+  color: #7f6899;
+  font-weight: 700;
+}
+
+.plato-calendar-ext-detail-status-finished-past .plato-calendar-ext-detail-value {
+  color: #6f7780;
+  font-weight: 700;
+}
+
+.plato-calendar-ext-description {
+  background: var(--plato-calendar-ext-bg-subtle);
+  border-radius: 8px;
+  margin-top: 18px;
+  padding: 14px 16px;
+}
+
+.plato-calendar-ext-description-title {
+  color: var(--plato-calendar-ext-text);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.plato-calendar-ext-description-text {
+  color: var(--plato-calendar-ext-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.plato-calendar-ext-detail-loading {
+  color: var(--plato-calendar-ext-text-muted);
+  font-size: 12px;
+  padding: 0 22px 14px;
+}
+
+.plato-calendar-ext-modal-feedback {
+  color: #c64040;
+  font-size: 12px;
+  min-height: 18px;
+  padding: 0 22px 10px;
+}
+
+.plato-calendar-ext-detail-loading[hidden],
+.plato-calendar-ext-modal-footer [hidden] {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  #plato-calendar-ext-root .plato-calendar-ext-content {
+    overflow-x: auto;
+  }
+
+  #plato-calendar-ext-root .plato-calendar-ext-toolbar,
+  #plato-calendar-ext-root .plato-calendar-ext-load-status,
+  #plato-calendar-ext-root .plato-calendar-ext-calendar {
+    min-width: 760px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #plato-calendar-ext-root *,
+  .plato-calendar-ext-modal-overlay * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
+
+#plato-calendar-ext-root [hidden],
+.plato-calendar-ext-modal-overlay [hidden] {
+  display: none !important;
+}

@@ -1,0 +1,44 @@
+const {JSDOM}=require('jsdom');
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const code=fs.readFileSync(require('node:path').join(__dirname, '../weekly/content.js'),'utf8');
+async function scenario(detail, type='quiz', redirected=false) {
+  const dom=new JSDOM('<main><div class="dashboard-section">original</div></main>',{url:'https://plato.pusan.ac.kr/course/view.php?id=6544',runScripts:'outside-only'});
+  const course=`<ul><li class="course-section" data-for="section" data-number="1"><h3 class="sectionname">1주차</h3><ul><li data-for="cmitem" class="modtype_${type} activity-completed"><a class="activity-container-link" href="/mod/${type}/view.php?id=12"><span class="activityname">자료</span></a></li></ul></li></ul>`;
+  dom.window.fetch=async href=>({ok:true,url:redirected && !href.includes('mode=sections')?'https://plato.pusan.ac.kr/login/index.php':href,text:async()=>href.includes('mode=sections')?course:detail});
+  dom.window.eval(fs.readFileSync(require('node:path').join(__dirname, '../weekly/quiz-status.js'),'utf8'));
+  dom.window.eval(code);
+  await new Promise(resolve=>setTimeout(resolve,25));
+  const result=dom.window.document.querySelector('.pwf-statuses').textContent;
+  dom.window.close();
+  return result;
+}
+(async()=>{
+  const nested='<main id="region-main"><h5>제출 상태</h5><ul><li><span>제출 상태</span><span>제출 완료</span></li><li><span>채점 상태</span><span>미채점</span></li><li><span>최종 수정일시</span><span>2026-09-01</span></li></ul></main>';
+  const assignment=await scenario(nested,'assign');
+  assert(assignment.includes('제출: 제출 완료'));
+  assert(assignment.includes('채점: 미채점'));
+  assert(!assignment.includes('최종 수정'));
+  assert(assignment.includes('활동: 완료'),'missing detail must preserve completion');
+  const quiz=await scenario('<main id="region-main"><div class="your-grade"><span class="mygrade">0</span>/<span class="quizgrade">10</span></div></main>');
+  assert(quiz.includes('점수: 0 / 10'),'zero score is valid');
+  const hidden=await scenario('<main id="region-main"><div class="intro">최고 점수: 10 점수: 8</div></main>');
+  assert(!hidden.includes('점수:'),'description/max score must not be mistaken for earned score');
+  const login=await scenario(nested,'assign',true);
+  assert(login.includes('제출: 확인 불가'),'login redirect cannot supply status');
+  console.log('PASS: isolated statuses, completion preservation, zero score, unpublished score, login redirect');
+  const attempt=(n,state,grade)=>`<li><h6>${n}차 응시</h6><div class="user-info-item-state"><span class="user-info-value">${state}</span></div><div class="user-info-item-grade"><span class="user-info-value">${grade}</span></div></li>`;
+  const graded=await scenario(`<div id="csms-mod-completion">완료</div><main id="region-main"><div class="your-grade"><span class="method">최고 점수:</span><span class="mygrade">16.00</span>/<span class="quizgrade">16.00</span></div><ul class="list-of-attempts">${attempt(1,'종료','총점 16.00점 중 <b>16.00</b>점 (상위 <b>100</b>%)')}</ul></main>`);
+  for(const expected of ['활동: 완료','제출: 제출 완료','채점: 채점 완료','최고 점수: 16.00 / 16.00']) assert(graded.includes(expected),graded);
+  const unattempted=await scenario('<div id="csms-mod-completion">미완료</div><main id="region-main"><div class="quizstartbuttondiv"><button>시험 응시</button></div></main>');
+  for(const expected of ['활동: 미완료','제출: 미응시','채점: 해당 없음']) assert(unattempted.includes(expected),unattempted);
+  const retry=await scenario(`<main id="region-main"><ul class="list-of-attempts">${attempt(2,'진행 중','')}${attempt(1,'종료','총점 16.00점 중 16.00점')}</ul><div class="your-grade"><span class="method">최고 점수:</span><span class="mygrade">16.00</span>/<span class="quizgrade">16.00</span></div></main>`);
+  assert(retry.includes('제출: 응시 중')); assert(retry.includes('2차 응시')); assert(retry.includes('채점: 해당 없음')); assert(retry.includes('최고 점수: 16.00 / 16.00'));
+  const unpublished=await scenario(`<main id="region-main"><ul class="list-of-attempts">${attempt(1,'종료','')}</ul></main>`);
+  assert(unpublished.includes('채점 정보 미공개')); assert(!unpublished.includes('점수:'));
+  const waiting=await scenario(`<main id="region-main"><ul class="list-of-attempts">${attempt(1,'종료','채점 대기')}</ul></main>`);
+  assert(waiting.includes('채점: 채점 대기'));
+  const zero=await scenario(`<main id="region-main"><ul class="list-of-attempts">${attempt(1,'종료','총점 16.00점 중 <b>0.00</b>점 (상위 <b>0</b>%)')}</ul></main>`);
+  assert(zero.includes('점수: 0.00 / 16.00'));
+  console.log('PASS: observed PLATO completed/unattempted layouts, multiple attempts, unpublished grade, pending grade, zero grade');
+})().catch(error=>{console.error(error);process.exitCode=1;});

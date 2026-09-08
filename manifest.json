@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Plato Enhanced",
+  "description": "PLATO 달력, 주차별 자료·활동 상태와 현재 수업 강의실 바로가기를 제공합니다.",
+  "version": "1.1.2",
+  "minimum_chrome_version": "111",
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://plato.pusan.ac.kr/*"
+      ],
+      "js": [
+        "src/page-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://plato.pusan.ac.kr/*"
+      ],
+      "css": [
+        "styles/calendar.css",
+        "styles/class-schedule.css"
+      ],
+      "js": [
+        "src/config.js",
+        "src/plato-parser.js",
+        "src/submission-parser.js",
+        "src/storage.js",
+        "src/data-source.js",
+        "src/calendar-model.js",
+        "src/activity-modal.js",
+        "src/calendar-view.js",
+        "src/content.js",
+        "src/class-schedule-model.js",
+        "src/class-schedule.js"
+      ],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": [
+        "https://plato.pusan.ac.kr/course/view.php*"
+      ],
+      "js": [
+        "weekly/quiz-status.js",
+        "weekly/content.js"
+      ],
+      "css": [
+        "weekly/style.css"
+      ],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ],
+  "host_permissions": [
+    "https://onestop.pusan.ac.kr/*"
+  ],
+  "background": {
+    "service_worker": "src/schedule-background.js"
+  }
+}
