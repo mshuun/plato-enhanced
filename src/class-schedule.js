@@ -2,11 +2,13 @@
   'use strict';
   if (!['/', '/index.php'].includes(location.pathname) || !document.body?.matches('#page-site-index')) return;
   const ns = global.PlatoCalendarExt, model = ns.classScheduleModel;
+  const refreshIntervalMs = ns.config.cacheTtlMs;
   const source = new ns.PlatoDataSource();
   const rootId = 'plato-enhanced-classroom';
   const days = '일월화수목금토';
   let root, body, clock, refresh, note, courses = [], meetings = [], scope = 'default';
   let fingerprint = '', cacheKey = '', updated = 0, attempted = 0, busy = false, error = '', signature = '';
+  let refreshTimer;
   const node = (tag, cls, text) => {
     const el = document.createElement(tag);
     if (cls) el.className = cls;
@@ -50,16 +52,16 @@
     const found = model.readCourses(document);
     const next = found.map(item => `${item.id}:${item.key}`).sort().join(',');
     if (next !== fingerprint) {
-      courses = found; fingerprint = next; meetings = []; updated = 0; cacheKey = ''; signature = '';
+      courses = found; fingerprint = next; meetings = []; updated = 0; attempted = 0; cacheKey = ''; signature = '';
       if (!busy) sync(false);
     }
     render();
   }
   async function sync(force) {
     if (busy || !courses.length) return;
+    if (!force && Date.now() - Math.max(updated, attempted) < refreshIntervalMs) return;
     busy = true; error = ''; render();
     const startedFor = fingerprint;
-    attempted = Date.now();
     try {
       const context = await source.getContext();
       const nextScope = /^\d+$/.test(String(context?.userId || '')) ? String(context.userId) : 'default';
@@ -70,12 +72,13 @@
       const cached = await storageGet(cacheKey);
       if (fingerprint !== startedFor) return;
       if (cached?.fingerprint === fingerprint && Number.isFinite(cached.updated) &&
-          cached.updated <= Date.now() && Date.now() - cached.updated < 7 * 86400000 && Array.isArray(cached.meetings)) {
+          cached.updated >= updated && cached.updated <= Date.now() && Date.now() - cached.updated < 7 * 86400000 && Array.isArray(cached.meetings)) {
         meetings = cached.meetings.filter(item => model.validMeeting(item, courses));
         updated = cached.updated;
       }
-      if (!force && updated && Date.now() - updated < 3600000) return;
+      if (!force && updated && Date.now() - updated < refreshIntervalMs) return;
       render();
+      attempted = Date.now();
       const result = await request();
       if (fingerprint !== startedFor) return;
       if (!result.ok || typeof result.html !== 'string') throw new Error('connection');
@@ -88,13 +91,20 @@
       const saved = await storageSet(cacheKey, { fingerprint, meetings, updated });
       if (!saved) error = '현재 시간표는 표시되지만 저장하지 못했습니다. 다음 접속 때 다시 연결합니다.';
     } catch (err) {
+      attempted = Date.now();
       error = err.message === 'identity' ? 'PLATO 로그인 정보를 확인하지 못했습니다. 페이지를 새로고침해 주세요.' :
         err.message === 'matching' ? '시간표와 일치하는 PLATO 과목·분반을 찾지 못했습니다.' :
           '학생지원시스템에 로그인한 뒤 시간표 새로고침을 눌러 주세요.';
     } finally {
       busy = false; signature = ''; render();
       if (fingerprint !== startedFor) sync(false);
+      else scheduleRefresh();
     }
+  }
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    const remaining = refreshIntervalMs - (Date.now() - Math.max(updated, attempted));
+    if (courses.length && remaining > 0) refreshTimer = setTimeout(tick, remaining);
   }
   function card(item, active) {
     const course = courses.find(course => course.id === item.courseId);
@@ -144,7 +154,7 @@
   function tick() {
     if (document.hidden) return;
     render();
-    if (!busy && courses.length && Date.now() - attempted > 3600000) sync(false);
+    if (!busy && courses.length && Date.now() - Math.max(updated, attempted) >= refreshIntervalMs) sync(false);
   }
   setInterval(tick, 30000);
   install();

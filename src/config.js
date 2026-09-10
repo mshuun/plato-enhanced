@@ -9,7 +9,7 @@
     requestEvent: "plato-calendar-ext:request:v1",
     responseEvent: "plato-calendar-ext:response:v1",
     bridgeTimeoutMs: 20000,
-    cacheTtlMs: 60000,
+    cacheTtlMs: 10 * 60 * 1000,
     submissionTimeoutMs: 8000,
     defaultTimezone: "Asia/Seoul",
     dueSoonHours: 48,

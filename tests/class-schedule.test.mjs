@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
 
 const root = new URL('../', import.meta.url);
+const configCode = await readFile(new URL('src/config.js', root), 'utf8');
 const modelCode = await readFile(new URL('src/class-schedule-model.js', root), 'utf8');
 const uiCode = await readFile(new URL('src/class-schedule.js', root), 'utf8');
 const background = await readFile(new URL('src/schedule-background.js', root), 'utf8');
@@ -15,7 +16,8 @@ const fixture = `<table id="ptTable"></table><div class="schedule-info"><h5 clas
 </dl></div></div>`;
 const home = `<body id="page-site-index"><div class="dashboard-container"><div class="dashboard-prompt">산지니 AI</div><div class="ongoing-courses"><a class="course-card" href="https://plato.pusan.ac.kr/course/view.php?id=6544"><h5>AI프로그래밍 (062)</h5></a></div></div></body>`;
 function setup() {
-  const dom = new JSDOM(home, { url: 'https://plato.pusan.ac.kr/', runScripts: 'outside-only' });
+  const dom = new JSDOM(home, { url: 'https://plato.pusan.ac.kr/', runScripts: 'outside-only', pretendToBeVisual: true });
+  dom.window.eval(configCode);
   dom.window.eval(modelCode);
   return dom;
 }
@@ -122,4 +124,66 @@ test('fresh account cache avoids fetching; expired and changed-course caches are
       assert.equal(fetches, mode === 'fresh' ? 0 : 1);
     } finally { dom.window.close(); }
   }
+});
+
+test('timetable refresh uses ten minutes from cached or completed updates and resets after manual refresh', async () => {
+  const dom = setup();
+  const w = dom.window;
+  try {
+    let now = Date.parse('2026-09-08T09:30:00+09:00'), fetches = 0, timerId = 0;
+    w.Date.now = () => now;
+    const timers = new Map();
+    w.setTimeout = (fn, delay) => { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; };
+    w.clearTimeout = id => timers.delete(id);
+    w.setInterval = () => 0;
+    const runDue = async () => {
+      for (const [id, timer] of [...timers]) {
+        if (timer.at > now) continue;
+        timers.delete(id); timer.fn();
+      }
+      await wait();
+    };
+    const model = w.PlatoCalendarExt.classScheduleModel;
+    const courses = model.readCourses(w.document);
+    const meetings = model.connect(courses, model.parseTimetable(new w.DOMParser().parseFromString(fixture, 'text/html')));
+    const key = 'platoEnhanced.timetable.v1.456';
+    const stored = { [key]: { fingerprint: courses.map(item => `${item.id}:${item.key}`).sort().join(','), meetings, updated: now - 540000 } };
+    w.PlatoCalendarExt.PlatoDataSource = class { async getContext() { return { userId: '456' }; } };
+    w.chrome = { runtime: { lastError: null, sendMessage(_msg, done) {
+      fetches++; now += 12000; done({ ok: true, html: fixture });
+    } }, storage: { local: {
+      get(_keys, done) { done(stored); },
+      set(data, done) { Object.assign(stored, data); done(); }
+    } } };
+    w.eval(uiCode); await wait();
+    assert.equal(fetches, 0);
+    now += 59999;
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await runDue();
+    assert.equal(fetches, 0);
+    now++;
+    await runDue();
+    assert.equal(fetches, 1);
+    const fetchedAt = now;
+    now = fetchedAt + 600000 - 12000;
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await runDue();
+    assert.equal(fetches, 1);
+    now = fetchedAt + 600000;
+    await runDue();
+    assert.equal(fetches, 2);
+
+    now += 120000;
+    w.document.querySelector('.pe-classroom-refresh').click();
+    await wait();
+    assert.equal(fetches, 3);
+    const manuallyUpdatedAt = now;
+    now = manuallyUpdatedAt + 599999;
+    w.document.dispatchEvent(new w.Event('visibilitychange'));
+    await runDue();
+    assert.equal(fetches, 3);
+    now++;
+    await runDue();
+    assert.equal(fetches, 4);
+  } finally { w.close(); }
 });

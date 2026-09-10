@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Plato Enhanced",
   "description": "PLATO 달력, 주차별 자료·활동 상태와 현재 수업 강의실 바로가기를 제공합니다.",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage"

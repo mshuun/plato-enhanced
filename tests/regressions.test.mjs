@@ -141,9 +141,14 @@ test('month cache expires and detail updates are reflected in cached activities'
     ds.updateActivity({ ...first.activities[0], submissionStatus: '제출 완료' });
     assert.equal((await ds.getMonth(2026, 9)).activities[0].submissionStatus, '제출 완료');
     assert.equal(calls, 1);
-    clock += 60001;
+    clock += 599999;
+    await ds.getMonth(2026, 9);
+    assert.equal(calls, 1);
+    clock += 1;
     await ds.getMonth(2026, 9);
     assert.equal(calls, 2);
+    await ds.getMonth(2026, 9, true);
+    assert.equal(calls, 3);
     ds.destroy();
   } finally { dom.window.close(); }
 });

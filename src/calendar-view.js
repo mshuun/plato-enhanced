@@ -45,6 +45,8 @@
       this.error = null;
       this.collapsed = false;
       this.loadSequence = 0;
+      this.lastUpdatedAt = 0;
+      this.lastRefreshAttemptAt = 0;
       this.destroyed = false;
       this.dataSource = new namespace.PlatoDataSource();
       this.boundOutsideClick = this.handleOutsideClick.bind(this);
@@ -82,12 +84,11 @@
       } catch (_error) { /* Use the PLATO site timezone fallback. */ }
       if (this.destroyed) return;
       this.unsubscribeStorage = namespace.storage.subscribe(() => this.reloadManual());
-      this.onVisible = () => {
-        if (!document.hidden && !this.collapsed && !this.loading && this.modal.overlay.hidden) this.loadMonth();
-      };
+      this.onVisible = () => this.autoRefresh();
       document.addEventListener("visibilitychange", this.onVisible);
       this.tick = window.setInterval(() => {
         if (!document.hidden && !this.collapsed && !this.loading && this.modal.overlay.hidden) this.render();
+        this.autoRefresh();
       }, 60000);
       this.applyCollapsedState();
       if (!this.collapsed) {
@@ -157,7 +158,8 @@
         // The current UI state still works if local persistence fails.
       }
       if (!this.collapsed && !this.loading) {
-        await this.loadMonth();
+        if (!this.fetchedAt) await this.loadMonth();
+        else await this.autoRefresh();
       }
     }
 
@@ -182,6 +184,28 @@
       await this.loadMonth();
     }
 
+    markUpdated(timestamp = Date.now()) {
+      if (this.destroyed || !Number.isFinite(timestamp) || timestamp <= this.lastUpdatedAt) return;
+      this.lastUpdatedAt = timestamp;
+      this.scheduleAutoRefresh();
+    }
+
+    scheduleAutoRefresh() {
+      window.clearTimeout(this.refreshTimer);
+      if (this.destroyed) return;
+      const remaining = config.cacheTtlMs - (Date.now() - Math.max(this.lastUpdatedAt, this.lastRefreshAttemptAt));
+      if (remaining > 0) this.refreshTimer = window.setTimeout(() => this.autoRefresh(), remaining);
+    }
+
+    async autoRefresh() {
+      if (this.destroyed || document.hidden || this.collapsed || this.loading ||
+          this.checkingSubmissions || !this.modal.overlay.hidden) return;
+      if (Date.now() - Math.max(this.lastUpdatedAt, this.lastRefreshAttemptAt) < config.cacheTtlMs) return;
+      this.lastRefreshAttemptAt = Date.now();
+      this.scheduleAutoRefresh();
+      await this.loadMonth(true);
+    }
+
     async loadMonth(forceRefresh) {
       if (this.destroyed) {
         return;
@@ -202,6 +226,7 @@
         this.timezone = this.validTimezone(result.timezone);
         this.partial = result.partial;
         this.fetchedAt = result.fetchedAt;
+        this.markUpdated(result.fetchedAt);
         this.modal.options.timezone = this.timezone;
         try {
           await this.reloadManual(false);
@@ -210,6 +235,8 @@
         }
       } catch (_error) {
         if (!this.destroyed && sequence === this.loadSequence) {
+          this.lastRefreshAttemptAt = Date.now();
+          this.scheduleAutoRefresh();
           this.activities = [];
           this.error = "PLATO에서 이 달의 일정을 불러오지 못했습니다.";
         }
@@ -424,6 +451,7 @@
       try {
         const values = await namespace.storage.getManualCompletions(scope);
         if (this.destroyed || sequence !== this.storageSequence || scope !== this.userScope) return;
+        if (render && JSON.stringify(values) !== JSON.stringify(this.manualCompletions)) this.markUpdated();
         this.manualCompletions = values;
         if (!this.modal.overlay.hidden && this.modal.activity) {
           this.modal.manualCompleted = values[this.modal.activity.id] === true;
@@ -433,8 +461,9 @@
       } catch (_error) { /* Preserve the last known local state on a read failure. */ }
     }
 
-    updateActivity(activity) {
+    updateActivity(activity, updatedAt = Date.now()) {
       if (this.destroyed) return;
+      this.markUpdated(updatedAt);
       this.activities = this.activities.map((item) => item.id === activity.id ? activity : item)
         .sort((a, b) => a.deadline - b.deadline);
       this.dataSource.updateActivity(activity);
@@ -447,13 +476,14 @@
 
     applyCourseResult(courseId, report) {
       if (!report) return;
+      this.markUpdated(report.checkedAt);
       for (const current of [...this.activities]) {
         if (String(current.courseId) !== String(courseId)) continue;
         const key = namespace.submissionParser.activityKey(current.activityUrl);
         const status = key && report.entries[key];
         if (status) this.updateActivity({ ...current, sourceStatus: status,
-          completionCheck: "verified", completionCheckedAt: report.checkedAt });
-        else if (current.completionCheck !== "verified") this.updateActivity({ ...current, completionCheck: report.check === "failed" ? "failed" : "unavailable" });
+          completionCheck: "verified", completionCheckedAt: report.checkedAt }, report.checkedAt);
+        else if (current.completionCheck !== "verified") this.updateActivity({ ...current, completionCheck: report.check === "failed" ? "failed" : "unavailable" }, report.checkedAt);
       }
     }
 
@@ -477,7 +507,7 @@
             const result = await this.dataSource.getSubmission(job.item, forceRefresh);
             if (this.destroyed || sequence !== this.loadSequence) return;
             const current = this.activities.find((activity) => activity.id === job.item.id);
-            if (result && current) this.updateActivity({ ...current, ...result });
+            if (result && current) this.updateActivity({ ...current, ...result }, result.submissionCheckedAt);
           }
         }
       };
@@ -532,6 +562,7 @@
       this.unsubscribeStorage?.();
       document.removeEventListener("visibilitychange", this.onVisible);
       window.clearInterval(this.tick);
+      window.clearTimeout(this.refreshTimer);
       this.modal.destroy();
       this.dataSource.destroy();
       if (this.root) {
