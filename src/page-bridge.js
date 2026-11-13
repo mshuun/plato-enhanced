@@ -31,28 +31,41 @@
     document.dispatchEvent(new CustomEvent(RESPONSE_EVENT, { detail }));
   }
 
-  function loadAmdModules(moduleNames) {
+  function loadAmdModules(moduleNames, signal) {
     return new Promise((resolve, reject) => {
       let attempts = 0;
+      let retryTimer;
+      const onAbort = () => finish(reject, new Error("PLATO_AMD_CANCELLED"));
+
+      function finish(settle, value) {
+        window.clearTimeout(retryTimer);
+        if (signal) signal.removeEventListener("abort", onAbort);
+        settle(value);
+      }
 
       function tryLoad() {
+        if (signal && signal.aborted) {
+          onAbort();
+          return;
+        }
         if (typeof window.require === "function") {
           try {
-            window.require(moduleNames, (...modules) => resolve(modules), reject);
+            window.require(moduleNames, (...modules) => finish(resolve, modules), error => finish(reject, error));
           } catch (error) {
-            reject(error);
+            finish(reject, error);
           }
           return;
         }
 
         attempts += 1;
         if (attempts >= MAX_REQUIRE_ATTEMPTS) {
-          reject(new Error("PLATO_AMD_UNAVAILABLE"));
+          finish(reject, new Error("PLATO_AMD_UNAVAILABLE"));
           return;
         }
-        window.setTimeout(tryLoad, 100);
+        retryTimer = window.setTimeout(tryLoad, 100);
       }
 
+      if (signal) signal.addEventListener("abort", onAbort, { once: true });
       tryLoad();
     });
   }
@@ -87,9 +100,11 @@
     };
   }
 
+  function actionSnapshot(state, complete) {
+    return { ...state.lastResult, events: [...state.events], complete };
+  }
+
   async function getActionData(actionRepository, bounds, state) {
-    const events = [];
-    let lastResult = { events: [] };
     let afterEventId = 0;
 
     for (let page = 0; page < MAX_ACTION_PAGES; page += 1) {
@@ -103,11 +118,16 @@
         args.aftereventid = afterEventId;
       }
 
-      lastResult = await toPromise(actionRepository.queryByTime(args));
-      const batch = lastResult && Array.isArray(lastResult.events) ? lastResult.events : [];
-      events.push(...batch);
+      const result = await toPromise(actionRepository.queryByTime(args));
+      if (state.expired) break;
+      if (!result || !Array.isArray(result.events) || result.events.some(item => !item || typeof item !== "object" || Array.isArray(item))) {
+        break;
+      }
+      const batch = result.events;
+      state.lastResult = result;
+      state.events.push(...batch);
       if (batch.length < ACTION_PAGE_SIZE) {
-        return { ...(lastResult || {}), events, complete: true };
+        return actionSnapshot(state, true);
       }
 
       const nextAfterEventId = Number(batch[batch.length - 1].id);
@@ -117,7 +137,7 @@
       afterEventId = nextAfterEventId;
     }
 
-    return { ...(lastResult || {}), events, complete: false };
+    return actionSnapshot(state, false);
   }
 
   async function getMonth(year, month) {
@@ -125,29 +145,41 @@
 
     const monthPromise = toPromise(
       calendarRepository.getCalendarMonthData(year, month, 0, 0, false, false, 1, "month")
-    );
+    ).then(data => {
+      if (!data || typeof data !== "object") throw new Error("PLATO_MONTH_DATA_INVALID");
+      return data;
+    });
 
     const bounds = getPaddedMonthBounds(year, month);
-    const state = { expired: false };
+    const state = { expired: false, events: [], lastResult: {} };
+    const controller = new AbortController();
     let timer;
+    let stopActions;
     const actionPromise = Promise.race([
-      loadAmdModules(["block_timeline/calendar_events_repository"])
+      loadAmdModules(["block_timeline/calendar_events_repository"], controller.signal)
         .then(([actionRepository]) => getActionData(actionRepository, bounds, state))
-        .catch(() => ({ events: [], complete: false })),
+        .catch(() => actionSnapshot(state, false)),
       new Promise((resolve) => {
-        timer = window.setTimeout(() => {
+        stopActions = () => {
           state.expired = true;
-          resolve({ events: [], complete: false });
-        }, ACTION_TIMEOUT_MS);
+          controller.abort();
+          resolve(actionSnapshot(state, false));
+        };
+        timer = window.setTimeout(stopActions, ACTION_TIMEOUT_MS);
       })
     ]).finally(() => window.clearTimeout(timer));
 
-    const [monthData, actionData] = await Promise.all([monthPromise, actionPromise]);
-    return {
-      month: monthData,
-      action: actionData,
-      context: getSafeContext()
-    };
+    try {
+      const [monthData, actionData] = await Promise.all([monthPromise, actionPromise]);
+      return {
+        month: monthData,
+        action: actionData,
+        context: getSafeContext()
+      };
+    } finally {
+      stopActions();
+      window.clearTimeout(timer);
+    }
   }
 
   async function getEvent(eventId) {

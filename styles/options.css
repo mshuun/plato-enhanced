@@ -1,0 +1,36 @@
+:root{font-family:Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;color:#26313f;background:#f5f7fa;font-size:15px;line-height:1.65;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0}
+main{max-width:830px;margin:0 auto;padding:48px 24px}
+h1{font-size:30px;line-height:1.35;letter-spacing:-.035em;margin:10px 0}
+h2{font-size:19px;letter-spacing:-.025em;margin:0 0 6px}
+p{color:#626f7e;margin:8px 0}
+header{margin-bottom:28px}
+.card{background:#fff;border:1px solid #e0e5eb;border-radius:16px;padding:26px;margin:20px 0;box-shadow:0 3px 18px #172b4d04}
+.section-heading{display:flex;gap:24px;align-items:center;justify-content:space-between}
+.section-heading p{font-size:13px}
+.toggle{display:flex;gap:8px;align-items:center;white-space:nowrap;color:#0870dc;font-weight:700}
+.toggle input{accent-color:#0870dc;width:19px;height:19px;flex:none}
+.fields{display:grid;gap:18px;margin-top:22px}
+.fields label{display:grid;gap:6px;font-size:13px;font-weight:650}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+input:not([type=checkbox]){width:100%;border:1px solid #d5dce5;border-radius:8px;padding:11px 12px;color:#26313f;background:#fff;font:inherit;font-size:14px;outline:none}
+input:focus-visible,button:focus-visible{outline:3px solid #1181f940;outline-offset:2px;border-color:#1181f9}
+small{display:block;color:#657181;font-size:12px;font-weight:400}
+button{font:inherit;font-size:13px;font-weight:650;color:#fff;background:#0870dc;border:1px solid #0870dc;border-radius:8px;padding:10px 15px;cursor:pointer;white-space:nowrap}
+button:hover{background:#075fbd}
+button:disabled{opacity:.5;cursor:wait}
+footer{display:flex;align-items:center;gap:20px;justify-content:space-between;margin-top:24px;padding-top:20px;border-top:1px solid #edf0f4}
+footer span{font-size:12px;color:#657181}
+.notice{background:#f4f8fe;border:1px solid #e3edfc;border-radius:8px;padding:10px 12px;font-size:13px;overflow-wrap:anywhere}
+#status{overflow-wrap:anywhere;min-height:25px;color:#08733e;font-weight:600;font-size:14px}
+#status.error{color:#b52e3b}
+.footnote{font-size:12px;text-align:center}
+@media(max-width:600px){main{padding:28px 15px}
+h1{font-size:25px}
+.card{padding:20px}
+.row{grid-template-columns:1fr}
+.section-heading{align-items:flex-start;gap:10px}
+footer{align-items:flex-start;flex-direction:column}
+button{white-space:normal}
+}

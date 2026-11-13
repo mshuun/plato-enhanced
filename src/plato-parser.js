@@ -13,6 +13,7 @@
       return "";
     }
     const source = String(value);
+    if (!/[<&\0]/.test(source)) return source.replace(/\s+/g, " ").trim();
     if (typeof DOMParser === "function") {
       const documentNode = new DOMParser().parseFromString(source, "text/html");
       return (documentNode.body.textContent || "").replace(/\s+/g, " ").trim();
@@ -24,48 +25,55 @@
     return values.find((value) => value !== null && value !== undefined && value !== "");
   }
 
+  function identifier(value) {
+    if (typeof value === "number") return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+    if (typeof value === "string" && /^\d+$/.test(value) && /[1-9]/.test(value)) return value.replace(/^0+/, "");
+    return null;
+  }
+
+  function calendarId(value) {
+    const id = identifier(value);
+    return id && Number.isSafeInteger(Number(id)) ? Number(id) : null;
+  }
+
+  function courseIdentifier(value) {
+    return [value?.course?.id, value?.courseid, value?.courseId].map(identifier).find(Boolean) || null;
+  }
+
   function asUnixSeconds(value) {
+    if (typeof value !== "number" && typeof value !== "string") return null;
     const number = Number(value);
     if (!Number.isFinite(number) || number <= 0) {
       return null;
     }
-    return number > 100000000000 ? Math.floor(number / 1000) : Math.floor(number);
+    const seconds = number > 100000000000 ? number / 1000 : number;
+    // A finite number can still exceed Date's supported +/-100,000,000 days.
+    return seconds <= 8640000000000 ? Math.floor(seconds) : null;
   }
 
-  function safePlatoUrl(value) {
+  function platoLocation(value) {
     if (typeof value !== "string" || !value.trim()) {
       return null;
     }
     try {
       const parsed = new URL(value, PLATO_ORIGIN);
-      if (parsed.origin !== PLATO_ORIGIN || parsed.protocol !== "https:") {
+      if (parsed.origin !== PLATO_ORIGIN || parsed.protocol !== "https:" || parsed.username || parsed.password) {
         return null;
       }
-      return parsed.href;
+      const module = parsed.pathname.match(/^\/mod\/([^/]+)\/view\.php$/);
+      if (module && (!/^[a-z][a-z0-9_]*$/.test(module[1]) || parsed.searchParams.getAll("id").length !== 1 ||
+          !/^[1-9]\d*$/.test(parsed.searchParams.get("id") || ""))) return null;
+      return { url: parsed.href, module: module ? module[1] : null, id: module ? parsed.searchParams.get("id") : null };
     } catch (_error) {
       return null;
     }
   }
 
-  function moduleFromUrl(value) {
-    const url = safePlatoUrl(value);
-    if (!url) {
-      return null;
-    }
-    const match = new URL(url).pathname.match(/^\/mod\/([^/]+)\/view\.php$/);
-    return match ? match[1] : null;
+  function safePlatoUrl(value) {
+    return platoLocation(value)?.url || null;
   }
 
-  function moduleIdFromUrl(value) {
-    const url = safePlatoUrl(value);
-    if (!url || !moduleFromUrl(url)) {
-      return null;
-    }
-    const id = new URL(url).searchParams.get("id");
-    return id && /^\d+$/.test(id) ? id : null;
-  }
-
-  function eventUrl(event, action) {
+  function eventLocation(event, action) {
     const candidates = [
       event && event.url,
       event && event.viewurl,
@@ -73,8 +81,14 @@
       action && action.url,
       action && action.action && action.action.url
     ];
-    const safe = candidates.map(safePlatoUrl).filter(Boolean);
-    return safe.find((url) => moduleFromUrl(url)) || safe[0] || null;
+    let fallback = null;
+    for (const value of candidates) {
+      const location = platoLocation(value);
+      if (!location) continue;
+      if (location.module) return location;
+      fallback ||= location;
+    }
+    return fallback;
   }
 
   function getCourse(event, action) {
@@ -82,14 +96,7 @@
     const actionSource = action || {};
     const courseObject = source.course && typeof source.course === "object" ? source.course : {};
     const actionCourse = actionSource.course && typeof actionSource.course === "object" ? actionSource.course : {};
-    const id = firstValue(
-      courseObject.id,
-      source.courseid,
-      source.courseId,
-      actionCourse.id,
-      actionSource.courseid,
-      actionSource.courseId
-    );
+    const id = courseIdentifier(source) || courseIdentifier(actionSource);
     const name = firstValue(
       courseObject.fullnamedisplay,
       courseObject.fullname,
@@ -105,7 +112,7 @@
       actionSource.coursename
     );
     return {
-      id: id === undefined ? null : String(id),
+      id,
       name: textFromHtml(name) || "강좌명 확인 불가"
     };
   }
@@ -115,7 +122,7 @@
       return false;
     }
     const hasIdentity = candidate.id !== undefined || candidate.eventid !== undefined ||
-      Boolean(moduleIdFromUrl(eventUrl(candidate, null)));
+      Boolean(eventLocation(candidate, null)?.id);
     const hasName = typeof firstValue(candidate.name, candidate.title, candidate.activityname) === "string";
     const hasTime = [candidate.timesort, candidate.timestart, candidate.time, candidate.timestamp, inheritedTimestamp].some(
       (value) => asUnixSeconds(value) !== null
@@ -144,7 +151,7 @@
       if (Array.isArray(node.events)) {
         node.events.forEach((event) => {
           if (looksLikeEvent(event, timestamp)) {
-            found.push({ event, dayTimestamp: timestamp });
+            found.push(event);
           }
         });
       }
@@ -168,36 +175,76 @@
   }
 
   function actionKey(event) {
-    const id = firstValue(event && event.id, event && event.eventid);
-    return id === undefined ? null : String(id);
+    return [event?.id, event?.eventid].map(identifier).find(Boolean) || null;
   }
 
-  function findAction(event, actions) {
-    const id = actionKey(event);
-    if (id) {
-      const exact = actions.find((action) => actionKey(action) === id);
-      if (exact) {
-        return exact;
+  function createActionIndex(actions) {
+    const entries = actions.map((action, order) => ({ action, order }));
+    const byId = new Map(), metadata = new WeakMap();
+    let byModule, byInstance;
+    const add = (index, key, entry) => {
+      if (!key) return;
+      if (!index.has(key)) index.set(key, []);
+      index.get(key).push(entry);
+    };
+    const describe = (event) => {
+      if (metadata.has(event)) return metadata.get(event);
+      const location = eventLocation(event, null);
+      const result = {
+        id: actionKey(event), moduleId: location?.id || null,
+        moduleName: String(firstValue(location?.module, event.modulename) || "").trim().toLowerCase(),
+        instance: identifier(event.instance), courseId: courseIdentifier(event),
+        deadline: [event.timesort, event.timestart].map(asUnixSeconds).find(Boolean) || null
+      };
+      metadata.set(event, result);
+      return result;
+    };
+    const moduleKey = info => info.moduleName && info.moduleId ? `${info.moduleName}:${info.moduleId}` : null;
+    const instanceKey = info => info.moduleName && info.instance ? `${info.moduleName}:${info.instance}` : null;
+    for (const entry of entries) add(byId, actionKey(entry.action), entry);
+    return {
+      byId, describe,
+      fallback(info) {
+        if (!info.moduleName || (!info.moduleId && !info.instance)) return [];
+        // Most activities match by calendar ID. Parse the rest only if needed,
+        // once for this payload, rather than once for every unmatched event.
+        if (!byModule) {
+          byModule = new Map(); byInstance = new Map();
+          for (const entry of entries) {
+            const candidate = describe(entry.action);
+            add(byModule, moduleKey(candidate), entry);
+            add(byInstance, instanceKey(candidate), entry);
+          }
+        }
+        const modules = byModule.get(moduleKey(info)) || [];
+        const instances = byInstance.get(instanceKey(info)) || [];
+        if (!modules.length) return instances;
+        if (!instances.length) return modules;
+        return [...new Set([...modules, ...instances])].sort((a, b) => a.order - b.order);
       }
+    };
+  }
+
+  function compatibleIdentity(event, action) {
+    return (!event.moduleId || !action.moduleId || (event.moduleId === action.moduleId && event.moduleName === action.moduleName)) &&
+      (!event.courseId || !action.courseId || event.courseId === action.courseId);
+  }
+
+  function findAction(event, index) {
+    const info = index.describe(event);
+    if (info.id) {
+      const exact = (index.byId.get(info.id) || []).find(entry => compatibleIdentity(info, index.describe(entry.action)));
+      if (exact) return exact.action;
     }
-
-    const eventUrlValue = eventUrl(event, null);
-    const moduleId = moduleIdFromUrl(eventUrlValue);
-    const moduleName = firstValue(event.modulename, moduleFromUrl(eventUrlValue));
-    const courseId = firstValue(event.courseid, event.course && event.course.id);
-    const deadline = asUnixSeconds(firstValue(event.timesort, event.timestart));
-
-    return actions.find((action) => {
-      const actionUrlValue = eventUrl(action, null);
-      const sameModuleId = moduleId && moduleIdFromUrl(actionUrlValue) === moduleId;
-      const sameInstance = event.instance !== undefined && action.instance !== undefined && String(event.instance) === String(action.instance);
-      const sameModule = moduleName && firstValue(action.modulename, moduleFromUrl(actionUrlValue)) === moduleName;
-      const actionCourseId = firstValue(action.courseid, action.course && action.course.id);
-      const sameCourse = courseId === undefined || actionCourseId === undefined || String(courseId) === String(actionCourseId);
-      const actionDeadline = asUnixSeconds(firstValue(action.timesort, action.timestart));
-      const sameTime = deadline === null || actionDeadline === null || deadline === actionDeadline;
-      return (sameModuleId || sameInstance) && sameModule && sameCourse && sameTime;
-    }) || null;
+    const fallback = index.fallback(info).find(entry => {
+      const candidate = index.describe(entry.action);
+      const sameModuleId = info.moduleId && info.moduleId === candidate.moduleId;
+      const sameInstance = info.instance && info.instance === candidate.instance;
+      const sameTime = info.deadline === null || candidate.deadline === null || info.deadline === candidate.deadline;
+      return compatibleIdentity(info, candidate) && (sameModuleId || sameInstance) &&
+        info.moduleName === candidate.moduleName && sameTime;
+    });
+    return fallback ? fallback.action : null;
   }
 
   function explicitSourceStatus(event, action) {
@@ -309,34 +356,28 @@
     return /제출|submit|submission/i.test(actionLabel) ? actionLabel : null;
   }
 
-  function normalizeOne(event, action, dayTimestamp) {
+  function normalizeOne(event, action) {
     const eventTypeValue = firstValue(event.eventtype, action && action.eventtype);
     const rawEventType = eventTypeValue === undefined ? "" : String(eventTypeValue).toLowerCase();
     if (rawEventType === "open" || rawEventType === "opensubmission") {
       return null;
     }
 
-    const url = eventUrl(event, action);
+    const location = eventLocation(event, action);
+    const url = location?.url || null;
     const moduleValue = firstValue(
+      location?.module,
       event.modulename,
-      action && action.modulename,
-      moduleFromUrl(url)
+      action && action.modulename
     );
     const moduleName = moduleValue === undefined ? "" : String(moduleValue).trim().toLowerCase();
     const componentValue = firstValue(event.component, action && action.component);
     const component = componentValue === undefined ? "" : String(componentValue);
-    const isModuleActivity = Boolean(
-      moduleName ||
-      moduleFromUrl(url) ||
-      component.startsWith("mod_") ||
-      (Number.isSafeInteger(Number(event.instance)) && Number(event.instance) > 0 && component.startsWith("mod_"))
-    );
-    if (!isModuleActivity) {
+    if (!moduleName && !component.startsWith("mod_")) {
       return null;
     }
 
-    const eventIdValue = firstValue(event.id, event.eventid, action && action.id, action && action.eventid);
-    const eventId = eventIdValue === undefined ? null : Number(eventIdValue);
+    const eventId = calendarId(actionKey(event) || actionKey(action));
     const deadline = [
       action && action.timesort,
       event.timesort,
@@ -348,9 +389,9 @@
     }
 
     const course = getCourse(event, action);
-    const cmid = moduleIdFromUrl(url);
+    const cmid = location?.id;
     const title = textFromHtml(firstValue(event.name, event.title, event.activityname, action && action.name)) || "활동명 확인 불가";
-    const stableId = Number.isSafeInteger(eventId) && eventId > 0
+    const stableId = eventId !== null
       ? `calendar:${eventId}`
       : (cmid ? `activity:${course.id || "unknown"}:${moduleName || "module"}:${cmid}` : null);
     if (!stableId) {
@@ -359,7 +400,7 @@
 
     return {
       id: stableId,
-      eventId: Number.isSafeInteger(eventId) && eventId > 0 ? eventId : null,
+      eventId,
       courseId: course.id,
       courseName: course.name,
       title,
@@ -377,16 +418,17 @@
   function normalizeMonthPayload(payload) {
     const monthPayload = payload && payload.month ? payload.month : payload;
     const actionPayload = payload && payload.action ? payload.action : {};
-    const actions = collectActionObjects(actionPayload);
+    const actionIndex = createActionIndex(collectActionObjects(actionPayload));
     const normalized = collectEventObjects(monthPayload)
-      .map(({ event, dayTimestamp }) => normalizeOne(event, findAction(event, actions), dayTimestamp))
+      .map(event => normalizeOne(event, findAction(event, actionIndex)))
       .filter(Boolean);
 
     const deduplicated = new Map();
     normalized.forEach((activity) => {
-      const semanticKey = activity.activityUrl
+      // A generic calendar/day URL is shared navigation, not an activity identity.
+      const semanticKey = platoLocation(activity.activityUrl)?.id
         ? activity.activityUrl + "|" + activity.deadline
-        : activity.id;
+        : activity.id + "|" + activity.deadline;
       const previous = deduplicated.get(semanticKey);
       if (!previous || (previous.sourceStatus.code === "unknown" && activity.sourceStatus.code !== "unknown")) {
         deduplicated.set(semanticKey, activity);
@@ -396,21 +438,35 @@
   }
 
   function mergeDetail(activity, payload) {
-    const event = payload && payload.event ? payload.event : payload;
-    if (!event || typeof event !== "object") {
+    const expectedId = calendarId(activity.eventId);
+    const event = payload && Object.prototype.hasOwnProperty.call(payload, "event") ? payload.event : payload;
+    if (!event || typeof event !== "object" || Array.isArray(event)) {
+      if (expectedId !== null) throw new Error("PLATO_DETAIL_UNAVAILABLE");
       return { ...activity };
     }
-    const detailUrl = eventUrl(event, null);
+    const hasId = Object.prototype.hasOwnProperty.call(event, "id") || Object.prototype.hasOwnProperty.call(event, "eventid");
+    if (expectedId !== null && hasId && calendarId(actionKey(event)) !== expectedId) {
+      throw new Error("PLATO_DETAIL_EVENT_MISMATCH");
+    }
+    const detail = eventLocation(event, null);
+    const original = platoLocation(activity.activityUrl);
     const detailStatus = explicitSourceStatus(event, null);
-    const preferredUrl = [detailUrl, activity.activityUrl].find((url) => moduleFromUrl(url)) || detailUrl || activity.activityUrl;
+    const preferDetail = detail && (detail.module || !original?.module);
+    const preferredUrl = preferDetail ? detail.url : activity.activityUrl;
+    if (detail?.id && original?.id && (detail.module !== original.module || detail.id !== original.id)) {
+      throw new Error("PLATO_DETAIL_ACTIVITY_MISMATCH");
+    }
+    const typeValue = firstValue(preferDetail ? detail.module : original?.module, event.modulename, activity.typeCode);
+    const typeCode = typeValue === undefined ? null : String(typeValue).trim().toLowerCase();
     const deadline = [event.timesort, event.timestart].map(asUnixSeconds).find(Boolean);
+    const courseName = getCourse(event, null).name;
     return {
       ...activity,
       deadline: deadline || activity.deadline,
-      courseName: getCourse(event, null).name === "강좌명 확인 불가" ? activity.courseName : getCourse(event, null).name,
+      courseName: courseName === "강좌명 확인 불가" ? activity.courseName : courseName,
       title: textFromHtml(firstValue(event.name, event.title)) || activity.title,
-      typeCode: firstValue(event.modulename, activity.typeCode),
-      typeLabel: OBSERVED_TYPE_LABELS[event.modulename] || event.modulename || activity.typeLabel,
+      typeCode,
+      typeLabel: OBSERVED_TYPE_LABELS[typeCode] || typeCode || activity.typeLabel,
       activityUrl: preferredUrl,
       description: textFromHtml(event.description) || activity.description,
       sourceStatus: detailStatus.code === "unknown" ? activity.sourceStatus : detailStatus,
@@ -420,11 +476,8 @@
 
   namespace.parser = Object.freeze({
     asUnixSeconds,
-    collectEventObjects,
     mergeDetail,
-    moduleFromUrl,
     normalizeMonthPayload,
-    safePlatoUrl,
-    textFromHtml
+    safePlatoUrl
   });
 })(globalThis);

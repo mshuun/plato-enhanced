@@ -2,6 +2,8 @@
 ((root) => {
   'use strict';
   const text = el => (el?.textContent || '').replace(/\s+/g, ' ').trim();
+  const ignoredAreas = '#intro, .description, .activity-description, .quizintro';
+  const own = node => !node.closest(ignoredAreas);
   const number = value => /^\d+(?:[.,]\d+)?$/.test(value);
   function grade(value) {
     const total = value.match(/^총점\s*(\d+(?:[.,]\d+)?)\s*점\s*중\s*(\d+(?:[.,]\d+)?)\s*점/);
@@ -11,9 +13,10 @@
   function parse(doc) {
     const region = doc.querySelector('#region-main');
     if (!region) return null;
-    const completion = text(doc.querySelector('#csms-mod-completion, .csms-mod-completion'));
+    const completionNode = [...doc.querySelectorAll('#csms-mod-completion, .csms-mod-completion')].find(own);
+    const completion = text(completionNode?.querySelector('.text') || completionNode);
     const result = {completion: /^(완료|미완료)$/.test(completion) ? completion : '', submission: '', grading: '', score: '', scoreLabel: '점수', attempt: ''};
-    const attempts = [...region.querySelectorAll('.list-of-attempts > li')].map((row, index) => ({
+    const attempts = [...region.querySelectorAll('.list-of-attempts > li')].filter(own).map((row, index) => ({
       number: Number(text(row.querySelector('h6')).match(/(\d+)\s*차/)?.[1] || index + 1),
       state: text(row.querySelector('.user-info-item-state .user-info-value')),
       gradeText: text(row.querySelector('.user-info-item-grade .user-info-value')),
@@ -33,11 +36,11 @@
         : result.score ? '채점 완료'
         : result.submission === '제출 완료' ? '채점 정보 미공개' : '해당 없음');
     } else {
-      const start = [...region.querySelectorAll('.quizstartbuttondiv button')].find(button => /^(시험 응시|퀴즈 응시|Attempt quiz now)$/i.test(text(button)));
+      const start = [...region.querySelectorAll('.quizstartbuttondiv button')].filter(own).find(button => /^(시험 응시|퀴즈 응시|Attempt quiz now)$/i.test(text(button)));
       if (start) { result.submission = '미응시'; result.grading = '해당 없음'; }
     }
     // This is the student's aggregate grade, not the maximum possible grade.
-    const aggregate = region.querySelector('.your-grade');
+    const aggregate = [...region.querySelectorAll('.your-grade')].find(own);
     const earned = text(aggregate?.querySelector('.mygrade'));
     const maximum = text(aggregate?.querySelector('.quizgrade'));
     if (number(earned)) {

@@ -16,7 +16,6 @@
     maxVisibleItemsPerDay: 3,
     selectors: Object.freeze({
       pageBody: "body#page-site-index",
-      dashboard: "body#page-site-index .dashboard-container",
       ongoingCourses: "body#page-site-index .dashboard-container > .ongoing-courses"
     }),
     storageKeys: Object.freeze({

@@ -2,7 +2,7 @@ body#page-site-index .dashboard-container > .dashboard-prompt { display: none !i
 
 #plato-enhanced-classroom {
   --pe-ink: var(--csms-tx-hierarchy-primary, #161819);
-  --pe-muted: var(--csms-tx-hierarchy-quinary, #899199);
+  --pe-muted: var(--csms-tx-hierarchy-secondary, #5e676e);
   --pe-blue: var(--csms-bg-semantic-info-primary, #1181f9);
   --pe-border: var(--csms-bo-hierarchy-secondary, #e0e3e5);
   background: transparent;
@@ -29,7 +29,8 @@ body#page-site-index .dashboard-container > .dashboard-prompt { display: none !i
 #plato-enhanced-classroom .pe-classroom-info p { color: var(--csms-tx-hierarchy-secondary, #2c2f32); margin: 0; font-size: 14px; line-height: 22px; }
 #plato-enhanced-classroom .pe-classroom-enter { display: inline-flex; justify-content: center; align-items: center; white-space: nowrap; min-height: 40px; padding: 10px 16px; border-radius: 8px; background: var(--pe-blue); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
 #plato-enhanced-classroom .pe-classroom-enter:hover { filter: brightness(.94); }
-#plato-enhanced-classroom a:focus-visible, #plato-enhanced-classroom button:focus-visible { outline: 3px solid var(--pe-blue); outline-offset: 3px; }
+#plato-enhanced-classroom a:focus-visible, #plato-enhanced-classroom button:focus-visible,
+#plato-enhanced-classroom h2:focus-visible, #plato-enhanced-classroom .pe-classroom-note:focus-visible { outline: 3px solid var(--pe-blue); outline-offset: 3px; }
 #plato-enhanced-classroom .pe-classroom-idle { font-size: 14px; margin: 0 0 12px; color: var(--pe-muted); }
 #plato-enhanced-classroom .pe-classroom-note { font-size: 11px; line-height: 18px; margin: 12px 0 0; color: var(--pe-muted); }
 #plato-enhanced-classroom .pe-classroom-note:empty { display: none; }

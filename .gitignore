@@ -1,5 +1,11 @@
 node_modules/
+artifacts/
 *.zip
+/plato-enhanced-*/
+/.impeccable/
+/.agents/
+/.codex/
+/.aws/
 *.log
 .DS_Store
 Thumbs.db

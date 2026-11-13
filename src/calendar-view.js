@@ -16,18 +16,7 @@
     return node;
   }
 
-  function formatTime(timestamp, timezone) {
-    const options = { hour: "2-digit", minute: "2-digit" };
-    if (timezone) {
-      options.timeZone = timezone;
-    }
-    try {
-      return new Intl.DateTimeFormat("ko-KR", options).format(new Date(timestamp * 1000));
-    } catch (_error) {
-      delete options.timeZone;
-      return new Intl.DateTimeFormat("ko-KR", options).format(new Date(timestamp * 1000));
-    }
-  }
+  const formatTime = model.formatTime;
 
   class CalendarView {
     constructor() {
@@ -42,13 +31,15 @@
       this.checkingSubmissions = false;
       this.storageSequence = 0;
       this.loading = false;
+      this.loadingFocus = null;
       this.error = null;
       this.collapsed = false;
       this.loadSequence = 0;
-      this.lastUpdatedAt = 0;
+      this.detailLoads = new Map();
       this.lastRefreshAttemptAt = 0;
       this.destroyed = false;
-      this.dataSource = new namespace.PlatoDataSource();
+      this.dataSource = new namespace.CombinedDataSource();
+      this.providerNotes = [];
       this.boundOutsideClick = this.handleOutsideClick.bind(this);
       this.boundPopoverEscape = this.handlePopoverEscape.bind(this);
       this.modal = new namespace.ActivityModal({
@@ -66,6 +57,8 @@
       this.root.setAttribute("aria-labelledby", "plato-calendar-ext-heading");
       this.buildShell();
       beforeNode.parentNode.insertBefore(this.root, beforeNode);
+      this.onResize = () => this.fitDayPopover();
+      window.addEventListener("resize", this.onResize);
 
       try {
         this.collapsed = await namespace.storage.getCollapsed();
@@ -84,10 +77,47 @@
       } catch (_error) { /* Use the PLATO site timezone fallback. */ }
       if (this.destroyed) return;
       this.unsubscribeStorage = namespace.storage.subscribe(() => this.reloadManual());
-      this.onVisible = () => this.autoRefresh();
+      this.onNespaChanged = () => {
+        if (this.destroyed) return;
+        this.loadSequence += 1;
+        this.loading = false;
+        this.checkingSubmissions = false;
+        this.fetchedAt = 0;
+        this.lastRefreshAttemptAt = 0;
+        this.dataSource.invalidateNespa();
+        this.activities = this.activities.filter(activity => activity.provider !== "nespa");
+        this.providerNotes = [];
+        if (this.modal.activity?.provider === "nespa") this.modal.close();
+        this.render();
+        if (!this.collapsed && !this.root?.closest('[hidden]')) this.loadMonth(false);
+      };
+      this.unsubscribeSettings = namespace.nespaSettings.subscribe(this.onNespaChanged);
+      this.unsubscribePrivate = this.dataSource.subscribeNespaInvalidation?.(reason => {
+        if (this.destroyed) return;
+        const message = reason === "auth-required" ? "NESPA에서 직접 로그인한 뒤 PLATO 달력을 새로고침해 주세요." : "NESPA 제출 상태를 확인하지 못했습니다.";
+        const clear = activity => ({ ...activity, submissionStatus: "확인 필요", submissionCheck: "failed", submissionCheckedAt: null,
+          score: null, attempts: null, detailPartial: false, sourceStatus: { code: "unknown", label: "제출 상태 확인 필요", source: "NESPA" } });
+        this.activities = this.activities.map(item => item.provider === "nespa" ? clear(item) : item);
+        if (this.modal.activity?.provider === "nespa") {
+          this.modal.activity = clear(this.modal.activity); this.modal.render(); this.modal.feedback.textContent = message;
+        }
+        this.partial = true;
+        this.providerNotes = this.providerNotes.filter(note => !note.includes("NESPA"));
+        this.providerNotes.push(message);
+        this.render();
+      });
+      this.onVisible = () => {
+        const paneHidden = Boolean(this.root?.closest('[hidden]'));
+        if (paneHidden && !this.modal.overlay.hidden) this.modal.close();
+        if (document.hidden || paneHidden) {
+          this.pauseRefresh();
+          return;
+        }
+        this.autoRefresh();
+      };
       document.addEventListener("visibilitychange", this.onVisible);
       this.tick = window.setInterval(() => {
-        if (!document.hidden && !this.collapsed && !this.loading && this.modal.overlay.hidden) this.render();
+        if (!document.hidden && !this.root?.closest('[hidden]') && !this.collapsed && !this.loading && this.modal.overlay.hidden) this.render();
         this.autoRefresh();
       }, 60000);
       this.applyCollapsedState();
@@ -128,12 +158,14 @@
       this.refreshButton = element("button", "plato-calendar-ext-icon-button", "↻");
       this.refreshButton.type = "button";
       this.refreshButton.setAttribute("aria-label", "현재 달 일정 새로고침");
+      this.refreshButton.title = "10분마다 자동 갱신 · 클릭하면 지금 갱신";
       this.refreshButton.addEventListener("click", () => this.loadMonth(true));
       const toolbarActions = element("div", "plato-calendar-ext-toolbar-actions");
       toolbarActions.append(this.todayButton, this.refreshButton);
       toolbar.append(navigation, toolbarActions);
 
       this.status = element("div", "plato-calendar-ext-load-status");
+      this.status.tabIndex = -1;
       this.status.setAttribute("role", "status");
       this.status.setAttribute("aria-live", "polite");
       this.calendar = element("div", "plato-calendar-ext-calendar");
@@ -152,6 +184,7 @@
     async toggleCollapsed() {
       this.collapsed = !this.collapsed;
       this.applyCollapsedState();
+      if (this.collapsed) this.pauseRefresh();
       try {
         await namespace.storage.setCollapsed(this.collapsed);
       } catch (_error) {
@@ -161,6 +194,17 @@
         if (!this.fetchedAt) await this.loadMonth();
         else await this.autoRefresh();
       }
+    }
+
+    pauseRefresh() {
+      if (!this.loading && !this.checkingSubmissions) return;
+      window.clearTimeout(this.refreshTimer);
+      // An already-started provider request can finish, but cannot update a
+      // paused view or start another batch of submission requests.
+      this.loadSequence += 1;
+      this.loading = false;
+      this.checkingSubmissions = false;
+      this.lastRefreshAttemptAt = 0;
     }
 
     applyCollapsedState() {
@@ -184,33 +228,30 @@
       await this.loadMonth();
     }
 
-    markUpdated(timestamp = Date.now()) {
-      if (this.destroyed || !Number.isFinite(timestamp) || timestamp <= this.lastUpdatedAt) return;
-      this.lastUpdatedAt = timestamp;
-      this.scheduleAutoRefresh();
-    }
-
     scheduleAutoRefresh() {
       window.clearTimeout(this.refreshTimer);
       if (this.destroyed) return;
-      const remaining = config.cacheTtlMs - (Date.now() - Math.max(this.lastUpdatedAt, this.lastRefreshAttemptAt));
-      if (remaining > 0) this.refreshTimer = window.setTimeout(() => this.autoRefresh(), remaining);
+      const age = Date.now() - this.lastRefreshAttemptAt;
+      const remaining = age < 0 ? 0 : config.cacheTtlMs - age;
+      if (remaining > 0 || age < 0) this.refreshTimer = window.setTimeout(() => this.autoRefresh(), remaining);
     }
 
     async autoRefresh() {
-      if (this.destroyed || document.hidden || this.collapsed || this.loading ||
+      if (this.destroyed || document.hidden || this.root?.closest('[hidden]') || this.collapsed || this.loading ||
           this.checkingSubmissions || !this.modal.overlay.hidden) return;
-      if (Date.now() - Math.max(this.lastUpdatedAt, this.lastRefreshAttemptAt) < config.cacheTtlMs) return;
-      this.lastRefreshAttemptAt = Date.now();
-      this.scheduleAutoRefresh();
+      const age = Date.now() - this.lastRefreshAttemptAt;
+      if (age >= 0 && age < config.cacheTtlMs) return;
       await this.loadMonth(true);
     }
 
     async loadMonth(forceRefresh) {
-      if (this.destroyed) {
+      if (this.destroyed || document.hidden || this.root?.closest('[hidden]')) {
         return;
       }
       const sequence = ++this.loadSequence;
+      // Local completion toggles and individual detail reads must not postpone
+      // the next full PLATO/NESPA refresh.
+      this.lastRefreshAttemptAt = Date.now();
       this.checkingSubmissions = false;
       this.loading = true;
       this.error = null;
@@ -220,28 +261,27 @@
         if (this.destroyed || sequence !== this.loadSequence) {
           return;
         }
-        if (this.userScope !== result.userScope) this.manualCompletions = {};
+        if (this.userScope !== result.userScope) {
+          this.manualCompletions = {};
+          if (this.modal.activity?.provider !== "nespa") this.modal.close();
+        }
         this.activities = result.activities;
         this.userScope = result.userScope;
         this.timezone = this.validTimezone(result.timezone);
         this.partial = result.partial;
+        this.providerNotes = result.providerNotes || [];
         this.fetchedAt = result.fetchedAt;
-        this.markUpdated(result.fetchedAt);
         this.modal.options.timezone = this.timezone;
-        try {
-          await this.reloadManual(false);
-        } catch (_error) {
-          this.manualCompletions = {};
-        }
+        await this.reloadManual(false);
       } catch (_error) {
         if (!this.destroyed && sequence === this.loadSequence) {
-          this.lastRefreshAttemptAt = Date.now();
-          this.scheduleAutoRefresh();
           this.activities = [];
           this.error = "PLATO에서 이 달의 일정을 불러오지 못했습니다.";
         }
       } finally {
         if (!this.destroyed && sequence === this.loadSequence) {
+          this.lastRefreshAttemptAt = Date.now();
+          this.scheduleAutoRefresh();
           this.loading = false;
           this.render();
           if (!this.error) this.refreshSubmissions(sequence, Boolean(forceRefresh));
@@ -250,7 +290,30 @@
     }
 
     render() {
-      const focusedId = document.activeElement?.dataset?.activityId;
+      const active = document.activeElement;
+      let focusedId = active?.dataset?.activityId;
+      let focusedDay = active?.classList.contains("plato-calendar-ext-more-button") ? active.closest("[data-day-key]")?.dataset.dayKey : null;
+      let openDay = this.dayPopover && { key: this.dayPopover.dayKey, scrollTop: this.dayPopover.node.scrollTop,
+        focused: this.dayPopover.node.contains(active), activityId: focusedId };
+      const control = [this.previousButton, this.nextButton, this.todayButton, this.refreshButton].includes(active) ? active : null;
+      const captureFocus = Boolean(this.loading && (focusedId || focusedDay || openDay?.focused || control));
+      if (captureFocus) {
+        this.loadingFocus = { activityId: focusedId, dayKey: openDay?.key || active?.closest('[data-day-key]')?.dataset.dayKey,
+          openDay, control };
+      }
+      const pendingFocus = this.loading ? null : this.loadingFocus;
+      if (!this.loading) this.loadingFocus = null;
+      const restoreLoading = pendingFocus && active === this.status && !this.error && !this.collapsed &&
+        !document.hidden && !this.root.closest('[hidden]') && this.modal.overlay.hidden;
+      if (restoreLoading && !pendingFocus.control) {
+        focusedId = this.activities.some(item => item.id === pendingFocus.activityId) ? pendingFocus.activityId : null;
+        focusedDay = pendingFocus.dayKey;
+        openDay = pendingFocus.openDay;
+      }
+      if (openDay?.focused && focusedId) {
+        const current = this.activities.find(item => item.id === focusedId);
+        if (current && model.dayKeyFromTimestamp(current.deadline, this.timezone) !== openDay.key) openDay = null;
+      }
       this.closeDayPopover();
       this.monthTitle.textContent = `${this.year}년 ${this.month}월`;
       this.countBadge.textContent = this.loading ? "…" : String(this.activities.length);
@@ -274,6 +337,7 @@
         const notes = [];
         if (this.checkingSubmissions) notes.push("학습활동 상태를 확인하고 있습니다…");
         if (this.partial) notes.push("일부 할 일 상태를 확인하지 못했습니다.");
+        notes.push(...this.providerNotes);
         if (this.fetchedAt) notes.push(`일정 갱신 ${formatTime(this.fetchedAt / 1000, this.timezone)}`);
         this.status.hidden = notes.length === 0;
         this.status.textContent = notes.join(" · ");
@@ -298,7 +362,8 @@
       grid.setAttribute("aria-label", `${this.year}년 ${this.month}월 학습활동`);
       const groups = model.groupActivitiesByDay(this.loading ? [] : this.activities, this.timezone);
       let row;
-      model.getMonthGrid(this.year, this.month, this.timezone).forEach((day, index) => {
+      const days = model.getMonthGrid(this.year, this.month, this.timezone);
+      days.forEach((day, index) => {
         if (index % 7 === 0) {
           row = element("div", "plato-calendar-ext-week");
           row.setAttribute("role", "row");
@@ -307,7 +372,35 @@
         row.append(this.renderDay(day, groups.get(day.key) || []));
       });
       this.calendar.append(grid);
-      if (focusedId && this.modal.overlay.hidden) this.restoreActivityFocus(focusedId);
+      if (this.loading) {
+        // Keep old private activity data out of the loading view. Only restore
+        // context after a fresh result, if the user has stayed on this message.
+        if (captureFocus) this.status.focus({ preventScroll: true });
+        return;
+      }
+      if (restoreLoading && pendingFocus.control?.isConnected && !pendingFocus.control.disabled) {
+        pendingFocus.control.focus({ preventScroll: true });
+        return;
+      }
+      let restored = false;
+      if (openDay && !this.loading && !this.collapsed && this.modal.overlay.hidden) {
+        const cell = this.calendar.querySelector(`[data-day-key="${openDay.key}"]`);
+        const trigger = cell?.querySelector(".plato-calendar-ext-more-button");
+        const day = days.find(item => item.key === openDay.key);
+        if (trigger && day) {
+          this.openDayPopover(cell, day, groups.get(day.key) || [], trigger, { focus: false });
+          if (openDay.focused) {
+            const target = [...this.dayPopover.node.querySelectorAll("[data-activity-id]")].find(node => node.dataset.activityId === openDay.activityId);
+            (target || this.dayPopover.closeButton).focus({ preventScroll: true });
+            restored = true;
+          }
+          this.dayPopover.node.scrollTop = openDay.scrollTop;
+        }
+      }
+      if (!restored && this.modal.overlay.hidden) {
+        if (focusedId) this.restoreActivityFocus(focusedId);
+        else if (focusedDay || openDay?.focused) this.restoreDayFocus(focusedDay || openDay.key);
+      }
     }
 
     renderDay(day, activities) {
@@ -337,6 +430,7 @@
         );
         more.type = "button";
         more.setAttribute("aria-expanded", "false");
+        more.setAttribute("aria-controls", `${config.rootId}-day-${day.key}`);
         more.addEventListener("click", (event) => {
           event.stopPropagation();
           this.openDayPopover(cell, day, activities, more);
@@ -362,10 +456,15 @@
       button.type = "button";
       button.dataset.activityId = activity.id;
       button.title = `${activity.title} · ${activity.courseName} · ${status.label}`;
-      button.setAttribute("aria-label", `${formatTime(activity.deadline, this.timezone)} ${activity.title}, ${activity.courseName}, ${status.label}`);
-      const time = element("span", "plato-calendar-ext-activity-time", formatTime(activity.deadline, this.timezone));
+      const timeLabel = formatTime(activity.deadline, this.timezone);
+      button.setAttribute("aria-label", `${timeLabel} ${activity.title}, ${activity.courseName}, ${status.label}`);
+      const time = element("span", "plato-calendar-ext-activity-time", timeLabel);
       const title = element("span", "plato-calendar-ext-activity-title", activity.title);
       const course = element("span", "plato-calendar-ext-activity-course", activity.courseName);
+      if (activity.provider === "nespa") {
+        const badge = element("span", "plato-calendar-ext-provider-badge", "NESPA");
+        course.prepend(badge);
+      }
       const statusNode = element("span", "plato-calendar-ext-activity-status", `${status.icon} ${status.label}`);
       button.append(time, title, course, statusNode);
       button.addEventListener("click", () => {
@@ -375,9 +474,10 @@
       return button;
     }
 
-    openDayPopover(cell, day, activities, trigger) {
+    openDayPopover(cell, day, activities, trigger, { focus = true } = {}) {
       this.closeDayPopover();
       const popover = element("div", "plato-calendar-ext-day-popover");
+      popover.id = `${config.rootId}-day-${day.key}`;
       if (day.column >= 5) {
         popover.classList.add("plato-calendar-ext-day-popover-right");
       }
@@ -394,14 +494,23 @@
       activities.forEach((activity) => list.append(this.activityButton(activity)));
       popover.append(header, list);
       cell.append(popover);
-      this.dayPopover = { node: popover, trigger };
+      this.dayPopover = { node: popover, trigger, dayKey: day.key, closeButton: close };
+      this.fitDayPopover();
       trigger.setAttribute("aria-expanded", "true");
       this.popoverTimer = window.setTimeout(() => {
         if (!this.dayPopover || this.destroyed) return;
         document.addEventListener("mousedown", this.boundOutsideClick, true);
         document.addEventListener("keydown", this.boundPopoverEscape, true);
       }, 0);
-      close.focus();
+      if (focus) close.focus();
+    }
+
+    fitDayPopover() {
+      if (!this.dayPopover || this.content.clientWidth <= 0) return;
+      this.dayPopover.node.style.maxWidth = `${Math.max(0, this.content.clientWidth - 16)}px`;
+      if (this.dayPopover.node.contains(document.activeElement)) {
+        document.activeElement.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      }
     }
 
     handleOutsideClick(event) {
@@ -441,8 +550,29 @@
     }
 
     restoreActivityFocus(id) {
+      if (this.root.closest('[hidden]')) {
+        document.activeElement?.blur();
+        return;
+      }
       const button = [...this.root.querySelectorAll("[data-activity-id]")].find((node) => node.dataset.activityId === id);
-      (button || this.collapseButton).focus();
+      if (button && !this.collapsed) { button.focus(); return; }
+      const activity = this.activities.find(item => item.id === id);
+      const key = activity && model.dayKeyFromTimestamp(activity.deadline, this.timezone);
+      const cell = key && this.calendar.querySelector(`[data-day-key="${key}"]`);
+      const trigger = cell?.querySelector(".plato-calendar-ext-more-button");
+      const day = trigger && model.getMonthGrid(this.year, this.month, this.timezone).find(item => item.key === key);
+      if (day && !this.collapsed) {
+        const items = this.activities.filter(item => model.dayKeyFromTimestamp(item.deadline, this.timezone) === key);
+        this.openDayPopover(cell, day, items, trigger, { focus: false });
+        const target = [...this.dayPopover.node.querySelectorAll("[data-activity-id]")].find(node => node.dataset.activityId === id);
+        (target || this.dayPopover.closeButton).focus();
+      } else this.collapseButton.focus();
+    }
+
+    restoreDayFocus(key) {
+      if (this.root.closest('[hidden]')) { document.activeElement?.blur(); return; }
+      const cell = !this.collapsed && this.calendar.querySelector(`[data-day-key="${key}"]`);
+      (cell?.querySelector(".plato-calendar-ext-more-button") || cell?.querySelector("[data-activity-id]") || this.collapseButton).focus();
     }
 
     async reloadManual(render = true) {
@@ -451,7 +581,6 @@
       try {
         const values = await namespace.storage.getManualCompletions(scope);
         if (this.destroyed || sequence !== this.storageSequence || scope !== this.userScope) return;
-        if (render && JSON.stringify(values) !== JSON.stringify(this.manualCompletions)) this.markUpdated();
         this.manualCompletions = values;
         if (!this.modal.overlay.hidden && this.modal.activity) {
           this.modal.manualCompleted = values[this.modal.activity.id] === true;
@@ -461,37 +590,57 @@
       } catch (_error) { /* Preserve the last known local state on a read failure. */ }
     }
 
-    updateActivity(activity, updatedAt = Date.now()) {
-      if (this.destroyed) return;
-      this.markUpdated(updatedAt);
-      this.activities = this.activities.map((item) => item.id === activity.id ? activity : item)
+    updateActivity(activity) {
+      this.updateActivities([activity]);
+    }
+
+    updateActivities(activities) {
+      if (this.destroyed || !activities.length) return;
+      const updates = new Map(activities.map(activity => [activity.id, activity]));
+      this.activities = this.activities.map(item => updates.get(item.id) || item)
         .sort((a, b) => a.deadline - b.deadline);
-      this.dataSource.updateActivity(activity);
-      if (!this.modal.overlay.hidden && this.modal.activity?.id === activity.id) {
-        this.modal.activity = { ...activity };
+      this.dataSource.updateActivities(activities);
+      const detail = updates.get(this.modal.activity?.id);
+      if (!this.modal.overlay.hidden && detail) {
+        this.modal.activity = { ...detail };
         this.modal.render();
       }
       this.render();
     }
 
+    prepareStatusRefresh(activity) {
+      if (!["PLATO 활동 현황", "PLATO 활동 상태"].includes(activity.sourceStatus?.source)) return { ...activity };
+      // Live status checks must not inherit a previous check's completion when
+      // the new response is missing, unreadable or no longer lists the activity.
+      return { ...activity, sourceStatus: { code: "unknown", label: "완료 상태 미확인", source: null },
+        completionCheck: "unavailable", completionCheckedAt: null };
+    }
+
+    mergeCourseResult(activity, report) {
+      if (!report) return activity;
+      const key = namespace.submissionParser.activityKey(activity.activityUrl);
+      const status = key && report.entries[key];
+      if (status) return { ...activity, sourceStatus: status, completionCheck: "verified", completionCheckedAt: report.checkedAt };
+      // A newly verified assignment page is independent of the course report.
+      if (activity.sourceStatus?.source === "PLATO 활동 상태" && activity.completionCheck === "verified") return activity;
+      const current = activity.sourceStatus?.source === "PLATO 활동 현황" ? this.prepareStatusRefresh(activity) : activity;
+      return { ...current, completionCheck: report.check === "failed" ? "failed" : "unavailable", completionCheckedAt: report.checkedAt };
+    }
+
     applyCourseResult(courseId, report) {
       if (!report) return;
-      this.markUpdated(report.checkedAt);
-      for (const current of [...this.activities]) {
-        if (String(current.courseId) !== String(courseId)) continue;
-        const key = namespace.submissionParser.activityKey(current.activityUrl);
-        const status = key && report.entries[key];
-        if (status) this.updateActivity({ ...current, sourceStatus: status,
-          completionCheck: "verified", completionCheckedAt: report.checkedAt }, report.checkedAt);
-        else if (current.completionCheck !== "verified") this.updateActivity({ ...current, completionCheck: report.check === "failed" ? "failed" : "unavailable" }, report.checkedAt);
-      }
+      const updates = this.activities.filter(current => current.provider !== "nespa" && String(current.courseId) === String(courseId))
+        .map(current => this.mergeCourseResult(current, report));
+      this.updateActivities(updates);
     }
 
     async refreshSubmissions(sequence, forceRefresh) {
-      const courses = [...new Set(this.activities.map((item) => item.courseId).filter((id) => namespace.submissionParser.reportUrl(id)))];
+      this.activities = this.activities.map(item => item.provider === "nespa" ? item : this.prepareStatusRefresh(item));
+      const platoActivities = this.activities.filter(item => item.provider !== "nespa");
+      const courses = [...new Set(platoActivities.map((item) => item.courseId).filter((id) => namespace.submissionParser.reportUrl(id)))];
       const queue = [
         ...courses.map((courseId) => ({ kind: "course", courseId })),
-        ...this.activities.filter((item) => namespace.submissionParser.assignmentUrl(item.activityUrl))
+        ...platoActivities.filter((item) => namespace.submissionParser.assignmentUrl(item.activityUrl))
           .map((item) => ({ kind: "submission", item }))
       ];
       this.checkingSubmissions = queue.length > 0;
@@ -507,7 +656,7 @@
             const result = await this.dataSource.getSubmission(job.item, forceRefresh);
             if (this.destroyed || sequence !== this.loadSequence) return;
             const current = this.activities.find((activity) => activity.id === job.item.id);
-            if (result && current) this.updateActivity({ ...current, ...result }, result.submissionCheckedAt);
+            if (result && current) this.updateActivity({ ...current, ...result });
           }
         }
       };
@@ -520,24 +669,39 @@
 
     async loadActivityDetail(activity) {
       const sequence = this.loadSequence;
-      let result = { ...activity };
+      const token = {};
+      this.detailLoads.set(activity.id, token);
+      const isCurrent = () => !this.destroyed && sequence === this.loadSequence && this.detailLoads.get(activity.id) === token;
+      try {
+        const detail = await this.collectActivityDetail(activity, isCurrent);
+        // The dialog must not apply an obsolete result after another refresh.
+        return isCurrent() ? detail : null;
+      }
+      finally { if (this.detailLoads.get(activity.id) === token) this.detailLoads.delete(activity.id); }
+    }
+
+    async collectActivityDetail(activity, isCurrent) {
+      if (activity.provider === "nespa") {
+        const detail = await this.dataSource.getNespaDetail(activity);
+        if (isCurrent()) this.updateActivity(detail);
+        return detail;
+      }
+      let result = this.prepareStatusRefresh(activity);
       let detailFailed = false;
       try {
         const detail = await this.dataSource.getDetail(activity.eventId);
         const current = this.activities.find((item) => item.id === activity.id) || result;
-        result = namespace.parser.mergeDetail(current, detail);
+        result = namespace.parser.mergeDetail(this.prepareStatusRefresh(current), detail);
       } catch (_error) { detailFailed = true; }
-      if (this.destroyed || sequence !== this.loadSequence) return result;
+      if (!isCurrent()) return result;
       const [submission, report] = await Promise.all([
         this.dataSource.getSubmission(result, true),
         this.dataSource.getCourseCompletions(result.courseId, true)
       ]);
       if (submission) Object.assign(result, submission);
-      const key = namespace.submissionParser.activityKey(result.activityUrl);
-      if (key && report?.entries[key]) Object.assign(result, { sourceStatus: report.entries[key],
-        completionCheck: "verified", completionCheckedAt: report.checkedAt });
+      result = this.mergeCourseResult(result, report);
       result.detailFailed = detailFailed;
-      if (!this.destroyed && sequence === this.loadSequence) {
+      if (isCurrent()) {
         this.applyCourseResult(result.courseId, report);
         this.updateActivity(result);
       }
@@ -545,11 +709,16 @@
     }
 
     async toggleManual(activity, completed) {
+      if (activity.provider === "nespa") return false;
       const scope = this.userScope;
       await namespace.storage.setManualCompletion(scope, activity.id, completed);
       if (this.destroyed || scope !== this.userScope) return completed;
+      // The write is acknowledged even if the following reconciliation fails.
+      if (completed) this.manualCompletions[activity.id] = true;
+      else delete this.manualCompletions[activity.id];
+      this.render();
       await this.reloadManual();
-      return completed;
+      return scope === this.userScope ? this.manualCompletions[activity.id] === true : completed;
     }
 
     destroy() {
@@ -557,9 +726,14 @@
         return;
       }
       this.destroyed = true;
+      this.loadingFocus = null;
       this.loadSequence += 1;
+      this.detailLoads.clear();
       this.closeDayPopover();
       this.unsubscribeStorage?.();
+      this.unsubscribeSettings?.();
+      this.unsubscribePrivate?.();
+      window.removeEventListener("resize", this.onResize);
       document.removeEventListener("visibilitychange", this.onVisible);
       window.clearInterval(this.tick);
       window.clearTimeout(this.refreshTimer);

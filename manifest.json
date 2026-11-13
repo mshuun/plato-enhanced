@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Plato Enhanced",
-  "description": "PLATO 달력, 주차별 자료·활동 상태와 현재 수업 강의실 바로가기를 제공합니다.",
-  "version": "1.1.3",
+  "description": "NESPA 과제 일정과 제출 상태를 PLATO 달력에 연동합니다.",
+  "version": "1.6.18",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage"
@@ -28,10 +28,14 @@
       ],
       "js": [
         "src/config.js",
+        "src/nespa-settings.js",
         "src/plato-parser.js",
         "src/submission-parser.js",
         "src/storage.js",
         "src/data-source.js",
+        "src/nespa-parser.js",
+        "src/nespa-data-source.js",
+        "src/combined-data-source.js",
         "src/calendar-model.js",
         "src/activity-modal.js",
         "src/calendar-view.js",
@@ -58,9 +62,12 @@
     }
   ],
   "host_permissions": [
-    "https://onestop.pusan.ac.kr/*"
+    "https://onestop.pusan.ac.kr/*",
+    "https://emerald.pusan.ac.kr/*"
   ],
   "background": {
-    "service_worker": "src/schedule-background.js"
-  }
+    "service_worker": "src/background.js"
+  },
+  "action": { "default_title": "Plato Enhanced 설정" },
+  "options_ui": { "page": "options.html", "open_in_tab": true }
 }

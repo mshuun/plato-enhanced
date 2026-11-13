@@ -71,7 +71,6 @@
       throw new Error("INVALID_ACTIVITY_ID");
     }
     await set({ [manualPrefix(scope) + activityId]: Boolean(completed) });
-    return getManualCompletions(scope);
   }
 
   function subscribe(listener) {

@@ -14,15 +14,21 @@
   }
   function readCourses(doc) {
     const courses = new Map();
+    const ambiguous = new Set();
     for (const link of doc.querySelectorAll('.ongoing-courses a.course-card[href]')) {
       const title = clean(link.querySelector('h5')?.textContent);
       const match = /^(.*?)\s*\((\d+)\)$/.exec(title);
       let url;
       try { url = new URL(link.getAttribute('href'), 'https://plato.pusan.ac.kr/'); } catch (_) { continue; }
-      if (!match || url.origin !== 'https://plato.pusan.ac.kr' || url.pathname !== '/course/view.php' || !/^\d+$/.test(url.searchParams.get('id') || '')) continue;
+      if (!match || !clean(match[1]) || url.origin !== 'https://plato.pusan.ac.kr' || url.username || url.password ||
+          url.pathname !== '/course/view.php' || url.searchParams.getAll('id').length !== 1 || !/^[1-9]\d*$/.test(url.searchParams.get('id') || '')) continue;
       const id = url.searchParams.get('id');
-      courses.set(id, { id, title, name: match[1], section: match[2], key: identity(match[1], match[2]),
-        url: `https://plato.pusan.ac.kr/course/view.php?id=${id}` });
+      if (ambiguous.has(id)) continue;
+      const course = { id, title, name: match[1], section: match[2], key: identity(match[1], match[2]),
+        url: `https://plato.pusan.ac.kr/course/view.php?id=${id}` };
+      if (courses.has(id) && courses.get(id).key !== course.key) {
+        courses.delete(id); ambiguous.add(id);
+      } else if (!courses.has(id)) courses.set(id, course);
     }
     return [...courses.values()];
   }
@@ -32,7 +38,7 @@
     for (const modal of doc.querySelectorAll('.schedule-info')) {
       const title = clean(modal.querySelector('.modal-title')?.textContent);
       const match = /^(.*?)\[(\d+)\]/.exec(title);
-      if (!match) continue;
+      if (!match || !clean(match[1])) continue;
       let range = null, last = null;
       for (const dt of modal.querySelectorAll('dt')) {
         if (dt.nextElementSibling?.tagName !== 'DD') continue;
@@ -65,7 +71,8 @@
       ? [{ ...item, courseId: matches.get(item.key)[0].id }] : []);
   }
   function validMeeting(item, courses) {
-    return item && courses.some(course => course.id === item.courseId && course.key === item.key) &&
+    return item && courses.filter(course => course.key === item.key).length === 1 &&
+      courses.some(course => course.id === item.courseId && course.key === item.key) &&
       Number.isInteger(item.day) && item.day >= 0 && item.day <= 6 &&
       Number.isInteger(item.start) && Number.isInteger(item.end) && item.start >= 0 && item.end < 1440 && item.end > item.start &&
       validDate(item.from) && validDate(item.to) && item.from <= item.to && typeof item.room === 'string';

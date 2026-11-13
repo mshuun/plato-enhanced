@@ -7,6 +7,8 @@
 .pwf-toolbar{justify-content:space-between;margin-bottom:16px}
 .pwf-toolbar h3,.pwf-week h4{margin:0!important;font-weight:700}
 .pwf-toggle{border:1px solid #dbe1e8;border-radius:8px;background:#fff;padding:8px 12px;color:#405066;cursor:pointer;font:inherit}
+.pwf-toggle:disabled{cursor:wait;opacity:.6}
+.pwf-update-status{margin:0 0 12px;color:#647286;font-size:13px;line-height:1.6}
 .pwf-week{width:100%;box-sizing:border-box;background:#fff;border:1px solid #e1e6ec;border-radius:14px;margin:0 0 18px;padding:22px 24px;box-shadow:0 2px 5px #20304705}
 .pwf-current{border-color:#75aaf0;box-shadow:inset 3px 0 #2878df}
 .pwf-week-heading{margin-bottom:10px;padding-bottom:14px;border-bottom:1px solid #edf0f4}
@@ -25,7 +27,7 @@
 .pwf-score{color:#3c4a88;background:#eef0ff}
 .pwf-item{display:flex;align-items:flex-start;gap:14px;padding:13px 8px;color:inherit!important;text-decoration:none!important;border-radius:6px}
 a.pwf-item:hover{background:#f2f7ff}
-.pwf-item:focus-visible,.pwf-toggle:focus-visible{outline:2px solid #2878df;outline-offset:3px}
+.pwf-item:focus-visible,.pwf-toggle:focus-visible,.pwf-toolbar h3:focus-visible,.pwf-week h4:focus-visible{outline:2px solid #2878df;outline-offset:3px}
 .pwf-type{flex-shrink:0;min-width:48px;text-align:center;font-size:12px;padding:3px 6px;border-radius:5px;background:#eef2f7;color:#506176}
 .pwf-details{display:flex;flex-direction:column;gap:5px;min-width:0}
 .pwf-name{font-size:15px;font-weight:600;overflow-wrap:anywhere}
